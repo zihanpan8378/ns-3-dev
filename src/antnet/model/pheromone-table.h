@@ -3,6 +3,7 @@
 
 #include "ns3/ipv4-address.h"
 #include "ns3/nstime.h"
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -18,6 +19,7 @@ struct LocalStats {
   double sigma2 = 0.0;
   double wbest = 1e12; // best observed RTT
   uint32_t wcount = 0;
+  double flow = 0.0;
 };
 
 class PheromoneTable {
@@ -31,6 +33,9 @@ public:
 
   void ObserveRtt(Ipv4Address dest, double T, double eta);
   double GetReinforcement(Ipv4Address dest, double T) const;
+  void AccumulateFlow(Ipv4Address dest, double amount);
+  double GetFlowWeight(Ipv4Address dest) const;
+  std::string DebugString() const;
 
 private:
   std::unordered_map<uint32_t, std::vector<NextHopEntry>> m_tbl;

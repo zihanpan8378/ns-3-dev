@@ -10,6 +10,9 @@
 #include "ns3/ipv4-raw-socket-factory.h"
 #include "ns3/boolean.h"
 #include "ns3/node.h"  // for GetId()
+#include "ns3/node-list.h"
+#include "ns3/net-device.h"
+#include <limits>
 
 namespace ns3 {
 
@@ -38,7 +41,7 @@ TypeId AntNetRoutingProtocol::GetTypeId() {
                   MakeTimeAccessor(&AntNetRoutingProtocol::m_neighborTimeout),
                   MakeTimeChecker())
     .AddAttribute("AntPeriod", "Interval to launch forward ants per known destination",
-                  TimeValue(Seconds(1.0)),
+                  TimeValue(Seconds(3.0)),
                   MakeTimeAccessor(&AntNetRoutingProtocol::m_antPeriod),
                   MakeTimeChecker())
     .AddAttribute("BetaAnt", "Exponent for ant next-hop sampling",
@@ -103,7 +106,7 @@ void AntNetRoutingProtocol::Start() {
   if (m_running || m_ipv4 == nullptr) return;
   m_running = true;
   CreateSockets();
-  m_helloEvent = Simulator::Schedule(Seconds(1), &AntNetRoutingProtocol::SendHello, this);
+  // SendHello not scheduled when using static neighbor configuration in the examples.
   m_antEvent = Simulator::Schedule(Seconds(5), &AntNetRoutingProtocol::ScheduleAnt, this);
 }
 
@@ -133,6 +136,7 @@ void AntNetRoutingProtocol::CreateSockets() {
 }
 
 void AntNetRoutingProtocol::SendHello() {
+  // Not used when static neighbors are configured in the example, kept for compatibility.
   NS_LOG_INFO("SendHello: nIf=" << m_ipv4->GetNInterfaces());
   Ptr<Packet> p = Create<Packet>(1);
   for (uint32_t i=0; i<m_ipv4->GetNInterfaces(); ++i) {
@@ -140,52 +144,98 @@ void AntNetRoutingProtocol::SendHello() {
       Ipv4InterfaceAddress ifaddr = m_ipv4->GetAddress(i, j);
       if (ifaddr.GetMask() == Ipv4Mask::GetZero()) continue;
       Ipv4Address bcast = ifaddr.GetBroadcast();
+      m_helloSocket->BindToNetDevice(m_ipv4->GetNetDevice(i));
       m_helloSocket->SendTo(p->Copy(), 0, InetSocketAddress(bcast, m_helloPort));
+      m_helloSocket->BindToNetDevice(Ptr<NetDevice>());
     }
   }
   Time now = Simulator::Now();
   std::vector<Ipv4Address> toErase;
   for (auto const& kv : m_neighbors) {
-    if (now - kv.second > m_neighborTimeout) toErase.push_back(kv.first);
+    if (!kv.second.isStatic && now - kv.second.lastSeen > m_neighborTimeout) {
+      toErase.push_back(kv.first);
+    }
   }
   for (auto const& a : toErase) m_neighbors.erase(a);
   m_helloEvent = Simulator::Schedule(m_helloPeriod, &AntNetRoutingProtocol::SendHello, this);
 }
 
 void AntNetRoutingProtocol::RecvHello(Ptr<Socket> socket) {
+  // Not used when static neighbors are configured in the example, kept for compatibility.
   Address from;
   Ptr<Packet> p = socket->RecvFrom(from);
   InetSocketAddress isa = InetSocketAddress::ConvertFrom(from);
   Ipv4Address peer = isa.GetIpv4();
-  m_neighbors[peer] = Simulator::Now();
+  if (IsMyAddress(peer)) return;
+  auto it = m_neighbors.find(peer);
+  if (it == m_neighbors.end()) {
+    m_neighbors.emplace(peer, NeighborInfo{Simulator::Now(), false});
+  } else {
+    it->second.lastSeen = Simulator::Now();
+  }
   NS_LOG_INFO("RecvHello from=" << peer);
 }
 
 void AntNetRoutingProtocol::ScheduleAnt() {
+  NS_LOG_INFO("ScheduleAnt node=" << GetObject<Node>()->GetId()
+               << " knownDestinations=" << m_knownDestinations.size()
+               << " neighbors=" << m_neighbors.size());
   LaunchAntsForKnownDestinations();
   m_antEvent = Simulator::Schedule(m_antPeriod, &AntNetRoutingProtocol::ScheduleAnt, this);
 }
 
 void AntNetRoutingProtocol::LaunchAntsForKnownDestinations() {
+  std::vector<Ipv4Address> candidates;
+  std::vector<double> weights;
+  double totalWeight = 0.0;
   for (auto const& d : m_knownDestinations) {
-    if (!IsMyAddress(d)) SendForwardAnt(d);
+    if (IsMyAddress(d)) {
+      continue;
+    }
+    double w = m_ph.GetFlowWeight(d);
+    if (w <= 0.0) {
+      w = 1e-6; // fallback weight so destinations without history still participate
+    }
+    candidates.push_back(d);
+    weights.push_back(w);
+    totalWeight += w;
   }
+  if (candidates.empty()) {
+    return;
+  }
+  if (totalWeight <= 0.0) {
+    totalWeight = static_cast<double>(candidates.size());
+    for (auto &w : weights) {
+      w = 1.0;
+    }
+  }
+  double r = m_rng->GetValue(0.0, totalWeight);
+  double acc = 0.0;
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    acc += weights[i];
+    if (r <= acc) {
+      SendForwardAnt(candidates[i]);
+      return;
+    }
+  }
+  SendForwardAnt(candidates.back());
 }
 
 void AntNetRoutingProtocol::SendForwardAnt(Ipv4Address dst) {
-  if (m_neighbors.empty()) return;
+  auto neighbors = GetNeighborAddresses();
+  NS_LOG_INFO("SendForwardAnt: nNeighbors=" << neighbors.size());
+  if (neighbors.empty()) return;
   AntHeader h;
   h.SetType(ANT_FORWARD);
   h.SetSrc(GetPrimaryAddress());
   h.SetDst(dst);
-  h.SetId(m_antSeq++);
+  uint32_t srcNodeId = GetObject<Node>()->GetId();
+  uint32_t dstNodeId = ResolveNodeId(dst);
+  h.SetId(srcNodeId, dstNodeId, m_antSeq++);
   h.SetLaunchTime(Simulator::Now().GetSeconds());
   h.PushHop(GetPrimaryAddress());
 
-  std::vector<Ipv4Address> nbs;
-  nbs.reserve(m_neighbors.size());
-  for (auto const& kv : m_neighbors) nbs.push_back(kv.first);
-  m_ph.EnsureDest(dst, nbs);
+  m_ph.EnsureDest(dst, neighbors);
   Ipv4Address nh = m_ph.SampleNextHop(dst, m_betaAnt, m_rng->GetInteger(1, 0x7fffffff));
   if (nh == Ipv4Address()) return;
 
@@ -219,8 +269,7 @@ void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
         auto path = h.GetPath();
         if (!path.empty() && path.size() > 16) { return; }
         h.PushHop(GetPrimaryAddress());
-        std::vector<Ipv4Address> nbs;
-        for (auto const& kv : m_neighbors) nbs.push_back(kv.first);
+        auto nbs = GetNeighborAddresses();
         m_ph.EnsureDest(h.GetDst(), nbs);
         Ipv4Address nh = m_ph.SampleNextHop(h.GetDst(), m_betaAnt, m_rng->GetInteger(1, 0x7fffffff));
         NS_LOG_INFO("FWD relay id=" << h.GetId() << " dst=" << h.GetDst() << " next=" << nh);
@@ -234,8 +283,7 @@ void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
       NS_LOG_INFO("BWD id=" << h.GetId() << " dst=" << h.GetDst() << " T=" << T);
       m_ph.ObserveRtt(h.GetDst(), T, m_eta);
       double r = m_ph.GetReinforcement(h.GetDst(), T);
-      std::vector<Ipv4Address> nbs;
-      for (auto const& kv : m_neighbors) nbs.push_back(kv.first);
+      auto nbs = GetNeighborAddresses();
       m_ph.Reinforce(h.GetDst(), prev, r, m_alphaLearn, nbs);
       Ipv4Address back;
       if (h.PopHop(back) && h.PopHop(back)) {
@@ -264,13 +312,18 @@ Ptr<Ipv4Route> AntNetRoutingProtocol::RouteOutput(Ptr<Packet> p, const Ipv4Heade
   Ipv4Address dst = header.GetDestination();
   if (IsMyAddress(dst)) { sockerr = Socket::ERROR_NOROUTETOHOST; return nullptr; }
   m_knownDestinations.insert(dst);
-  std::vector<Ipv4Address> nbs;
-  for (auto const& kv : m_neighbors) nbs.push_back(kv.first);
+  auto nbs = GetNeighborAddresses();
   m_ph.EnsureDest(dst, nbs);
   Ipv4Address nh = m_ph.SampleNextHop(dst, m_betaData, m_rng->GetInteger(1, 0x7fffffff));
-  NS_LOG_INFO("RouteOutput dst=" << dst << " nh=" << nh);
+  // NS_LOG_INFO("RouteOutput dst=" << dst << " nh=" << nh);
   Ptr<Ipv4Route> rt = BuildRoute(dst, nh);
-  if (rt) { sockerr = Socket::ERROR_NOTERROR; return rt; }
+  if (rt) {
+    if (p) {
+      m_ph.AccumulateFlow(dst, static_cast<double>(p->GetSize()));
+    }
+    sockerr = Socket::ERROR_NOTERROR;
+    return rt;
+  }
   sockerr = Socket::ERROR_NOROUTETOHOST; return nullptr;
 }
 
@@ -289,12 +342,14 @@ bool AntNetRoutingProtocol::RouteInput(Ptr<const Packet> p, const Ipv4Header &he
     return false;
   }
   m_knownDestinations.insert(dst);
-  std::vector<Ipv4Address> nbs;
-  for (auto const& kv : m_neighbors) nbs.push_back(kv.first);
+  auto nbs = GetNeighborAddresses();
   m_ph.EnsureDest(dst, nbs);
   Ipv4Address nh = m_ph.SampleNextHop(dst, m_betaData, m_rng->GetInteger(1, 0x7fffffff));
   Ptr<Ipv4Route> rt = BuildRoute(dst, nh);
-  if (rt && !ucb.IsNull()) { ucb(rt, p, header); return true; }
+  if (rt) {
+    m_ph.AccumulateFlow(dst, static_cast<double>(p->GetSize()));
+    if (!ucb.IsNull()) { ucb(rt, p, header); return true; }
+  }
   if (!ecb.IsNull()) ecb(p, header, Socket::ERROR_NOROUTETOHOST);
   return false;
 }
@@ -321,7 +376,9 @@ Ipv4Address AntNetRoutingProtocol::GetPrimaryAddress() const {
   for (uint32_t i=0; i<m_ipv4->GetNInterfaces(); ++i) {
     for (uint32_t j=0; j<m_ipv4->GetNAddresses(i); ++j) {
       Ipv4InterfaceAddress ifaddr = m_ipv4->GetAddress(i,j);
-      if (ifaddr.GetMask() != Ipv4Mask::GetZero()) return ifaddr.GetLocal();
+      if (ifaddr.GetMask() != Ipv4Mask::GetZero() && ifaddr.GetLocal() != Ipv4Address::GetLoopback()) {
+        return ifaddr.GetLocal();
+      }
     }
   }
   return Ipv4Address("0.0.0.0");
@@ -348,6 +405,46 @@ int32_t AntNetRoutingProtocol::FindInterfaceForNextHop(Ipv4Address nh) const {
     }
   }
   return -1;
+}
+
+uint32_t AntNetRoutingProtocol::ResolveNodeId(Ipv4Address addr) const {
+  for (NodeList::Iterator it = NodeList::Begin(); it != NodeList::End(); ++it) {
+    Ptr<Node> node = *it;
+    Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+    if (ipv4 == nullptr) {
+      continue;
+    }
+    for (uint32_t i = 0; i < ipv4->GetNInterfaces(); ++i) {
+      for (uint32_t j = 0; j < ipv4->GetNAddresses(i); ++j) {
+        if (ipv4->GetAddress(i, j).GetLocal() == addr) {
+          return node->GetId();
+        }
+      }
+    }
+  }
+  return std::numeric_limits<uint32_t>::max();
+}
+
+void AntNetRoutingProtocol::AddStaticNeighbor(Ipv4Address neighbor) {
+  NeighborInfo &info = m_neighbors[neighbor];
+  info.lastSeen = Simulator::Now();
+  info.isStatic = true;
+  NS_LOG_INFO("AddStaticNeighbor neighbor=" << neighbor);
+}
+
+std::vector<Ipv4Address> AntNetRoutingProtocol::GetNeighborAddresses() const {
+  // NS_LOG_INFO("GetNeighborAddresses: nNeighbors=" << m_neighbors.size());
+  std::vector<Ipv4Address> nbs;
+  nbs.reserve(m_neighbors.size());
+  for (auto const& kv : m_neighbors) {
+    nbs.push_back(kv.first);
+  }
+  return nbs;
+}
+
+void AntNetRoutingProtocol::DumpPheromoneTable() const {
+  NS_LOG_INFO("Node " << GetObject<Node>()->GetId()
+                       << " PheromoneTable snapshot\n" << m_ph.DebugString());
 }
 
 } // namespace ns3

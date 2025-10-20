@@ -8,7 +8,7 @@ NS_LOG_COMPONENT_DEFINE("AntHeaders");
 NS_OBJECT_ENSURE_REGISTERED(AntHeader);
 
 AntHeader::AntHeader()
-  : m_type(ANT_FORWARD), m_src(), m_dst(), m_id(0), m_launchTime(0.0) {}
+  : m_type(ANT_FORWARD), m_src(), m_dst(), m_id(), m_launchTime(0.0) {}
 
 TypeId AntHeader::GetTypeId() {
   static TypeId tid = TypeId("ns3::AntHeader")
@@ -26,12 +26,14 @@ void AntHeader::Print(std::ostream& os) const {
 }
 
 uint32_t AntHeader::GetSerializedSize() const {
-  return 1 + 4 + 8 + 4 + 4 + 2 + 4 * m_path.size();
+  return 1 + 4 + 4 + 4 + 8 + 4 + 4 + 2 + 4 * m_path.size();
 }
 
 void AntHeader::Serialize(Buffer::Iterator i) const {
   i.WriteU8(static_cast<uint8_t>(m_type));
-  i.WriteHtonU32(m_id);
+  i.WriteHtonU32(m_id.srcNodeId);
+  i.WriteHtonU32(m_id.dstNodeId);
+  i.WriteHtonU32(m_id.seq);
   union { double d; uint64_t u; } u;
   u.d = m_launchTime;
   i.WriteHtonU64(u.u);
@@ -46,7 +48,9 @@ void AntHeader::Serialize(Buffer::Iterator i) const {
 uint32_t AntHeader::Deserialize(Buffer::Iterator i) {
   uint8_t t = i.ReadU8();
   m_type = static_cast<AntType>(t);
-  m_id = i.ReadNtohU32();
+  m_id.srcNodeId = i.ReadNtohU32();
+  m_id.dstNodeId = i.ReadNtohU32();
+  m_id.seq = i.ReadNtohU32();
   union { double d; uint64_t u; } u;
   u.u = i.ReadNtohU64();
   m_launchTime = u.d;
@@ -68,8 +72,17 @@ void AntHeader::SetDst(Ipv4Address a) { m_dst = a; }
 Ipv4Address AntHeader::GetSrc() const { return m_src; }
 Ipv4Address AntHeader::GetDst() const { return m_dst; }
 
-void AntHeader::SetId(uint32_t id) { m_id = id; }
-uint32_t AntHeader::GetId() const { return m_id; }
+void AntHeader::SetId(uint32_t srcNodeId, uint32_t dstNodeId, uint32_t seq) {
+  m_id.srcNodeId = srcNodeId;
+  m_id.dstNodeId = dstNodeId;
+  m_id.seq = seq;
+}
+
+void AntHeader::SetId(const AntId& id) {
+  m_id = id;
+}
+
+AntId AntHeader::GetId() const { return m_id; }
 
 void AntHeader::SetLaunchTime(double t) { m_launchTime = t; }
 double AntHeader::GetLaunchTime() const { return m_launchTime; }
@@ -84,5 +97,10 @@ bool AntHeader::PopHop(Ipv4Address &addr) {
 const std::vector<Ipv4Address>& GetPath();
 const std::vector<Ipv4Address>& AntHeader::GetPath() const { return m_path; }
 void AntHeader::SetPath(const std::vector<Ipv4Address>& p) { m_path = p; }
+
+std::ostream& operator<<(std::ostream& os, const AntId& id) {
+  os << id.srcNodeId << "_" << id.dstNodeId << "_" << id.seq;
+  return os;
+}
 
 } // namespace ns3

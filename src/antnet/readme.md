@@ -4,9 +4,10 @@ git clone https://github.com/zihanpan8378/ns-3-dev.git
 cd ns-3-dev
 ```
 
-Make an venv for ns3 and install dependencies
+Make an venv for ns3 and install dependencies (deactivate conda's venv if exist)
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
+conda deactivate
+python3 -m venv .venv && source ~/.venv/bin/activate
 pip install -U pip
 pip install cppyy==3.1.2
 pip install ns3

@@ -5,6 +5,8 @@
 #include "ns3/csma-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/antnet-helper.h"
+#include "ns3/antnet-routing-protocol.h"
+#include "ns3/ipv4-list-routing.h"
 #include "ns3/packet-sink.h"
 
 using namespace ns3;
@@ -13,14 +15,14 @@ NS_LOG_COMPONENT_DEFINE("AntNetCsmaChain");
 
 int main (int argc, char *argv[])
 {
-  LogComponentEnable("AntNetRoutingProtocol", LOG_LEVEL_DEBUG);
-  LogComponentEnable("PheromoneTable", LOG_LEVEL_DEBUG);
+  LogComponentEnable("AntNetRoutingProtocol", LOG_LEVEL_INFO);
+  LogComponentEnable("PheromoneTable", LOG_LEVEL_INFO);
 
   LogComponentEnableAll(LOG_PREFIX_TIME);
   LogComponentEnableAll(LOG_PREFIX_NODE);
   LogComponentEnableAll(LOG_PREFIX_LEVEL);
 
-  double simTime = 30.0;     // Simulation time
+  double simTime = 60.0;     // Simulation time
   bool   enablePcap = false; // Switch to true if PCAP capture is desired
 
   CommandLine cmd;
@@ -85,6 +87,45 @@ int main (int argc, char *argv[])
   addr.SetBase("10.0.4.0",  "255.255.255.0");  // LAN4
   Ipv4InterfaceContainer if_lan4 = addr.Assign(lan4);
 
+  auto getAntnet = [] (Ptr<Node> node) -> Ptr<AntNetRoutingProtocol> {
+    Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+    NS_ABORT_MSG_IF(ipv4 == nullptr, "Node missing Ipv4 object");
+    Ptr<Ipv4RoutingProtocol> proto = ipv4->GetRoutingProtocol();
+    Ptr<AntNetRoutingProtocol> ant = DynamicCast<AntNetRoutingProtocol>(proto);
+    if (ant) {
+      return ant;
+    }
+    Ptr<Ipv4ListRouting> list = DynamicCast<Ipv4ListRouting>(proto);
+    NS_ABORT_MSG_IF(list == nullptr, "Ipv4ListRouting not found on node");
+    for (uint32_t i = 0; i < list->GetNRoutingProtocols(); ++i) {
+      int16_t priority;
+      Ptr<Ipv4RoutingProtocol> rp = list->GetRoutingProtocol(i, priority);
+      ant = DynamicCast<AntNetRoutingProtocol>(rp);
+      if (ant) {
+        return ant;
+      }
+    }
+    NS_ABORT_MSG("AntNetRoutingProtocol not found on node");
+  };
+
+  Ptr<AntNetRoutingProtocol> antH0 = getAntnet(H0);
+  Ptr<AntNetRoutingProtocol> antR0 = getAntnet(R0);
+  Ptr<AntNetRoutingProtocol> antR1 = getAntnet(R1);
+  Ptr<AntNetRoutingProtocol> antR2 = getAntnet(R2);
+  Ptr<AntNetRoutingProtocol> antR3 = getAntnet(R3);
+  Ptr<AntNetRoutingProtocol> antH4 = getAntnet(H4);
+
+  antH0->AddStaticNeighbor(if_lan0.GetAddress(1)); // H0 -> R0
+  antR0->AddStaticNeighbor(if_lan0.GetAddress(0)); // R0 -> H0
+  antR0->AddStaticNeighbor(if_01.GetAddress(1)); // R0 -> R1
+  antR1->AddStaticNeighbor(if_01.GetAddress(0)); // R1 -> R0
+  antR1->AddStaticNeighbor(if_12.GetAddress(1)); // R1 -> R2
+  antR2->AddStaticNeighbor(if_12.GetAddress(0)); // R2 -> R1
+  antR2->AddStaticNeighbor(if_23.GetAddress(1)); // R2 -> R3
+  antR3->AddStaticNeighbor(if_23.GetAddress(0)); // R3 -> R2
+  antR3->AddStaticNeighbor(if_lan4.GetAddress(1)); // R3 -> H4
+  antH4->AddStaticNeighbor(if_lan4.GetAddress(0)); // H4 -> R3
+
   // Application: H0 sends UDP traffic to H4; H4 runs a UDP sink
   uint16_t port = 9000;
   ApplicationContainer sinkApp;
@@ -112,6 +153,13 @@ int main (int argc, char *argv[])
 
   Simulator::Stop(Seconds(simTime));
   Simulator::Run();
+
+  antH0->DumpPheromoneTable();
+  antR0->DumpPheromoneTable();
+  antR1->DumpPheromoneTable();
+  antR2->DumpPheromoneTable();
+  antR3->DumpPheromoneTable();
+  antH4->DumpPheromoneTable();
 
   // Print simple stats: total received bytes and average throughput
   uint64_t rxBytes = DynamicCast<PacketSink>(sinkApp.Get(0))->GetTotalRx();

@@ -11,6 +11,7 @@
 #include "ns3/ant-headers.h"
 #include <set>
 #include <map>
+#include <vector>
 
 namespace ns3 {
 
@@ -35,6 +36,9 @@ public:
   void SetIpv4(Ptr<Ipv4> ipv4) override;
   void PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit unit = Time::S) const override;
 
+  void AddStaticNeighbor(Ipv4Address neighbor);
+  void DumpPheromoneTable() const;
+
 private:
   void Start();
   void Stop();
@@ -52,6 +56,8 @@ private:
   int32_t FindInterfaceForAddress(Ipv4Address a) const;
   int32_t FindInterfaceForNextHop(Ipv4Address nh) const;
   Ptr<Ipv4Route> BuildRoute(Ipv4Address dest, Ipv4Address nextHop) const;
+  std::vector<Ipv4Address> GetNeighborAddresses() const;
+  uint32_t ResolveNodeId(Ipv4Address addr) const;
 
   bool m_running;
 
@@ -72,7 +78,12 @@ private:
   Time m_neighborTimeout;
   Time m_antPeriod;
 
-  std::map<Ipv4Address, Time> m_neighbors;
+  struct NeighborInfo {
+    Time lastSeen;
+    bool isStatic;
+  };
+
+  std::map<Ipv4Address, NeighborInfo> m_neighbors;
   std::set<Ipv4Address> m_knownDestinations;
 
   PheromoneTable m_ph;
