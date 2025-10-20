@@ -11,28 +11,30 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("AntNetCsmaMesh");
 
-// Generate consecutive subnets: 10.1.N.0/24
-static void SetNextSubnet(Ipv4AddressHelper &addr, uint32_t n)
-{
+// Helper to index routers on an RxC grid
+static inline uint32_t Idx(uint32_t r, uint32_t c, uint32_t cols) { return r * cols + c; }
+
+// Helper to set next subnet base: 10.0.N.0/24
+static void SetNextSubnet(Ipv4AddressHelper &addr, uint32_t &n) {
   std::ostringstream base;
-  base << "10.1." << n << ".0";
-  addr.SetBase(base.str().c_str(), "255.255.255.0");
+  base << "10.0." << n++ << ".0";
+  addr.SetBase(Ipv4Address(base.str().c_str()), "255.255.255.0");
 }
 
 int main(int argc, char *argv[])
 {
+  // Log for quick diagnosis
   LogComponentEnable("AntNetRoutingProtocol", LOG_LEVEL_INFO);
   LogComponentEnable("PheromoneTable", LOG_LEVEL_DEBUG);
-
   LogComponentEnableAll(LOG_PREFIX_TIME);
   LogComponentEnableAll(LOG_PREFIX_NODE);
   LogComponentEnableAll(LOG_PREFIX_LEVEL);
 
-  double simTime = 90.0;      // Simulation duration
-  bool enablePcap = false;    // Enable packet capture
+  double simTime = 90.0;
+  bool enablePcap = false;
   uint32_t rows = 3, cols = 3;
-  double fastDelayUs = 2000;  // 2 ms for most links
-  double slowDelayUs = 8000;  // 8 ms for the central "slow link" (for comparison)
+  double fastDelayUs = 2000;  // 2 ms
+  double slowDelayUs = 8000;  // 8 ms
   std::string dataRate = "100Mbps";
 
   CommandLine cmd;
@@ -40,95 +42,96 @@ int main(int argc, char *argv[])
   cmd.AddValue("enablePcap", "Enable CSMA PCAP tracing", enablePcap);
   cmd.AddValue("rows", "Grid rows", rows);
   cmd.AddValue("cols", "Grid cols", cols);
+  cmd.AddValue("fastDelayUs", "Fast link delay (us)", fastDelayUs);
+  cmd.AddValue("slowDelayUs", "Slow link delay (us)", slowDelayUs);
   cmd.Parse(argc, argv);
 
-  // --- 1) Create nodes: R = rows*cols routers + two end hosts Hs/Hd
+  // --- 1) Create nodes: RxC routers + two end hosts Hs/Hd
   NodeContainer routers; routers.Create(rows * cols);
-  Ptr<Node> Hs = CreateObject<Node>(); // Source host (attached to R(0,0))
-  Ptr<Node> Hd = CreateObject<Node>(); // Destination host (attached to R(rows-1, cols-1))
+  Ptr<Node> Hs = CreateObject<Node>();
+  Ptr<Node> Hd = CreateObject<Node>();
 
-  auto idx = [cols](uint32_t r, uint32_t c){ return r * cols + c; };
-
-  // --- 2) Two CSMA types: fast & slow (slow only for one specific link)
-  CsmaHelper csmaFast, csmaSlow;
-  csmaFast.SetChannelAttribute("DataRate", DataRateValue(DataRate(dataRate)));
-  csmaFast.SetChannelAttribute("Delay",   TimeValue(MicroSeconds(fastDelayUs)));
-  csmaSlow.SetChannelAttribute("DataRate", DataRateValue(DataRate(dataRate)));
-  csmaSlow.SetChannelAttribute("Delay",   TimeValue(MicroSeconds(slowDelayUs)));
-
-  // Helper to assign IP addresses consistently
-  Ipv4AddressHelper addr;
-  uint32_t netId = 0;
-  std::vector<Ipv4InterfaceContainer> allIfs;
-
-  // --- 3) Wire up adjacent routers in the grid (one subnet per edge)
-  // Slow down the "central horizontal edge"; e.g., rows=3, cols=3 uses slow link for (1,1)<->(1,2)
-  auto isSlowEdge = [rows,cols](uint32_t r, uint32_t c, bool horizontal) {
-    if (rows >= 3 && cols >= 3) {
-      if (horizontal) { // (r,c) -- (r,c+1)
-        return (r == 1 && c == 1); // Central horizontal link
-      } else { // (r,c) -- (r+1,c)
-        return false;
-      }
-    }
-    return false;
-  };
-
-  // Horizontal edges
-  for (uint32_t r=0; r<rows; ++r) {
-    for (uint32_t c=0; c+1<cols; ++c) {
-      NodeContainer pair(routers.Get(idx(r,c)), routers.Get(idx(r,c+1)));
-      NetDeviceContainer devs = (isSlowEdge(r,c,true) ? csmaSlow : csmaFast).Install(pair);
-      SetNextSubnet(addr, netId++);
-      allIfs.push_back(addr.Assign(devs));
-    }
-  }
-  // Vertical edges
-  for (uint32_t r=0; r+1<rows; ++r) {
-    for (uint32_t c=0; c<cols; ++c) {
-      NodeContainer pair(routers.Get(idx(r,c)), routers.Get(idx(r+1,c)));
-      NetDeviceContainer devs = (isSlowEdge(r,c,false) ? csmaSlow : csmaFast).Install(pair);
-      SetNextSubnet(addr, netId++);
-      allIfs.push_back(addr.Assign(devs));
-    }
-  }
-
-  // --- 4) Attach each host to a router
-  // Hs <-> R(0,0)
-  {
-    NodeContainer lan(Hs, routers.Get(idx(0,0)));
-    NetDeviceContainer devs = csmaFast.Install(lan);
-    SetNextSubnet(addr, netId++);
-    allIfs.push_back(addr.Assign(devs));
-  }
-  // Hd <-> R(rows-1, cols-1)
-  {
-    NodeContainer lan(Hd, routers.Get(idx(rows-1, cols-1)));
-    NetDeviceContainer devs = csmaFast.Install(lan);
-    SetNextSubnet(addr, netId++);
-    allIfs.push_back(addr.Assign(devs));
-  }
-
-  // --- 5) Network stack + AntNet routing
+  // --- 2) Install Internet + AntNet early (before address assignment)
   InternetStackHelper stack;
   Ipv4ListRoutingHelper list;
   AntNetHelper antnet;
-  // You may fine-tune parameters here, e.g.:
+  // You can tune AntNet params if you like:
   // antnet.Set("AntPeriod", TimeValue(Seconds(0.5)));
   // antnet.Set("BetaData", DoubleValue(1.6));
   list.Add(antnet, 10);
   stack.SetRoutingHelper(list);
   stack.Install(NodeContainer(routers, Hs, Hd));
 
+  // --- 3) Prepare CSMA helpers
+  CsmaHelper csmaFast, csmaSlow;
+  csmaFast.SetChannelAttribute("DataRate", DataRateValue(DataRate(dataRate)));
+  csmaFast.SetChannelAttribute("Delay",   TimeValue(MicroSeconds(fastDelayUs)));
+  csmaSlow.SetChannelAttribute("DataRate", DataRateValue(DataRate(dataRate)));
+  csmaSlow.SetChannelAttribute("Delay",   TimeValue(MicroSeconds(slowDelayUs)));
+
+  auto isSlowEdge = [rows, cols](uint32_t r, uint32_t c, bool horizontal) {
+    if (rows >= 3 && cols >= 3) {
+      if (horizontal) {          // (r,c) -- (r,c+1)
+        return (r == 1 && c == 1); // central horizontal link slow
+      } else {                   // (r,c) -- (r+1,c)
+        return false;
+      }
+    }
+    return false;
+  };
+
+  // --- 4) Wire up the grid with per-edge subnets and assign IPs
+  Ipv4AddressHelper addr;
+  uint32_t subnetId = 0;
+
+  // Keep the interface container for the Hd<->router LAN so we can grab Hd’s IP reliably.
+  Ipv4InterfaceContainer ifsHs, ifsHd;
+
+  // Horizontal edges
+  for (uint32_t r = 0; r < rows; ++r) {
+    for (uint32_t c = 0; c + 1 < cols; ++c) {
+      NodeContainer pair(routers.Get(Idx(r, c, cols)), routers.Get(Idx(r, c + 1, cols)));
+      NetDeviceContainer devs = (isSlowEdge(r, c, true) ? csmaSlow : csmaFast).Install(pair);
+      SetNextSubnet(addr, subnetId);
+      addr.Assign(devs);
+    }
+  }
+
+  // Vertical edges
+  for (uint32_t r = 0; r + 1 < rows; ++r) {
+    for (uint32_t c = 0; c < cols; ++c) {
+      NodeContainer pair(routers.Get(Idx(r, c, cols)), routers.Get(Idx(r + 1, c, cols)));
+      NetDeviceContainer devs = (isSlowEdge(r, c, false) ? csmaSlow : csmaFast).Install(pair);
+      SetNextSubnet(addr, subnetId);
+      addr.Assign(devs);
+    }
+  }
+
+  // --- 5) Attach hosts to corner routers (each on its own /24)
+  // Hs <-> R(0,0)
+  {
+    NodeContainer lan(Hs, routers.Get(Idx(0, 0, cols)));
+    NetDeviceContainer devs = csmaFast.Install(lan);
+    SetNextSubnet(addr, subnetId);
+    ifsHs = addr.Assign(devs);   // index 0 is Hs, index 1 is router
+  }
+  // Hd <-> R(rows-1, cols-1)
+  {
+    NodeContainer lan(Hd, routers.Get(Idx(rows - 1, cols - 1, cols)));
+    NetDeviceContainer devs = csmaFast.Install(lan);
+    SetNextSubnet(addr, subnetId);
+    ifsHd = addr.Assign(devs);   // index 0 is Hd, index 1 is router
+  }
+
   // --- 6) Application: UDP flow from Hs to Hd
-  // Retrieve Hd's host-side IP (the last interface container, index 1 for Hd)
-  Ipv4Address hdIp = allIfs.back().GetAddress(1);
-  uint16_t port = 9000;
+  const Ipv4Address hdIp = ifsHd.GetAddress(0); // <<< sink must bind to Hd’s IP
+  const uint16_t port = 9000;
 
   // Sink on Hd
   PacketSinkHelper sink("ns3::UdpSocketFactory", InetSocketAddress(hdIp, port));
   ApplicationContainer sinkApp = sink.Install(Hd);
   sinkApp.Start(Seconds(0.4));
+  sinkApp.Stop(Seconds(simTime));
 
   // OnOff on Hs
   OnOffHelper onoff("ns3::UdpSocketFactory", InetSocketAddress(hdIp, port));
@@ -140,26 +143,26 @@ int main(int argc, char *argv[])
   src.Start(Seconds(1.0));
   src.Stop(Seconds(simTime - 1));
 
-  // Optional packet capture
+  // Optional PCAP
   if (enablePcap) {
     csmaFast.EnablePcapAll("antnet-mesh", true);
     csmaSlow.EnablePcapAll("antnet-mesh-slow", true);
   }
 
-  // --- 7) FlowMonitor: inspect throughput/latency roughly
-  Ptr<FlowMonitor> fm;
+  // --- 7) FlowMonitor for quick stats
   FlowMonitorHelper fmh;
-  fm = fmh.InstallAll();
+  Ptr<FlowMonitor> fm = fmh.InstallAll();
 
   Simulator::Stop(Seconds(simTime));
   Simulator::Run();
 
   fm->CheckForLostPackets();
   Ptr<Ipv4FlowClassifier> cl = DynamicCast<Ipv4FlowClassifier>(fmh.GetClassifier());
-  FlowMonitor::FlowStatsContainer stats = fm->GetFlowStats();
+  auto stats = fm->GetFlowStats();
+
   double aggThr = 0.0;
   for (const auto &kv : stats) {
-    auto flowId = kv.first;
+    uint32_t flowId = kv.first;
     const auto &st = kv.second;
     Ipv4FlowClassifier::FiveTuple t = cl->FindFlow(flowId);
     if (t.destinationPort == port) {
@@ -169,7 +172,7 @@ int main(int argc, char *argv[])
       std::cout << "[FLOW] " << t.sourceAddress << " -> " << t.destinationAddress
                 << " rx=" << st.rxBytes
                 << " thr=" << thrMbps << " Mbps"
-                << " delayAvg=" << (st.delaySum.GetSeconds()/std::max<uint64_t>(1, st.rxPackets)) << " s"
+                << " delayAvg=" << (st.rxPackets ? st.delaySum.GetSeconds() / st.rxPackets : 0.0) << " s"
                 << " loss=" << (st.txPackets - st.rxPackets) << "\n";
     }
   }
