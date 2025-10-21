@@ -6,6 +6,7 @@
 #include "ns3/applications-module.h"
 #include "ns3/flow-monitor-module.h"
 #include "ns3/antnet-helper.h"
+#include "ns3/antnet-routing-protocol.h"   // <= needed for AddStaticNeighbor
 
 using namespace ns3;
 
@@ -23,7 +24,7 @@ static void SetNextSubnet(Ipv4AddressHelper &addr, uint32_t &n) {
 
 int main(int argc, char *argv[])
 {
-  // Log for quick diagnosis
+  // Logging (useful if anything goes wrong)
   LogComponentEnable("AntNetRoutingProtocol", LOG_LEVEL_INFO);
   LogComponentEnable("PheromoneTable", LOG_LEVEL_DEBUG);
   LogComponentEnableAll(LOG_PREFIX_TIME);
@@ -55,7 +56,7 @@ int main(int argc, char *argv[])
   InternetStackHelper stack;
   Ipv4ListRoutingHelper list;
   AntNetHelper antnet;
-  // You can tune AntNet params if you like:
+  // Optional AntNet tuning:
   // antnet.Set("AntPeriod", TimeValue(Seconds(0.5)));
   // antnet.Set("BetaData", DoubleValue(1.6));
   list.Add(antnet, 10);
@@ -71,9 +72,9 @@ int main(int argc, char *argv[])
 
   auto isSlowEdge = [rows, cols](uint32_t r, uint32_t c, bool horizontal) {
     if (rows >= 3 && cols >= 3) {
-      if (horizontal) {          // (r,c) -- (r,c+1)
-        return (r == 1 && c == 1); // central horizontal link slow
-      } else {                   // (r,c) -- (r+1,c)
+      if (horizontal) {                // (r,c) -- (r,c+1)
+        return (r == 1 && c == 1);     // central horizontal link is slow
+      } else {                         // (r,c) -- (r+1,c)
         return false;
       }
     }
@@ -84,10 +85,11 @@ int main(int argc, char *argv[])
   Ipv4AddressHelper addr;
   uint32_t subnetId = 0;
 
-  // Keep the interface container for the Hd<->router LAN so we can grab Hd’s IP reliably.
+  // (We’ll need these to fetch host-side IPs and to identify host LAN channels)
   Ipv4InterfaceContainer ifsHs, ifsHd;
+  NetDeviceContainer hsLanDevs, hdLanDevs;
 
-  // Horizontal edges
+  // Horizontal edges (router <-> router)
   for (uint32_t r = 0; r < rows; ++r) {
     for (uint32_t c = 0; c + 1 < cols; ++c) {
       NodeContainer pair(routers.Get(Idx(r, c, cols)), routers.Get(Idx(r, c + 1, cols)));
@@ -97,7 +99,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  // Vertical edges
+  // Vertical edges (router <-> router)
   for (uint32_t r = 0; r + 1 < rows; ++r) {
     for (uint32_t c = 0; c < cols; ++c) {
       NodeContainer pair(routers.Get(Idx(r, c, cols)), routers.Get(Idx(r + 1, c, cols)));
@@ -111,29 +113,79 @@ int main(int argc, char *argv[])
   // Hs <-> R(0,0)
   {
     NodeContainer lan(Hs, routers.Get(Idx(0, 0, cols)));
-    NetDeviceContainer devs = csmaFast.Install(lan);
+    hsLanDevs = csmaFast.Install(lan);           // save to identify host LAN channel
     SetNextSubnet(addr, subnetId);
-    ifsHs = addr.Assign(devs);   // index 0 is Hs, index 1 is router
+    ifsHs = addr.Assign(hsLanDevs);              // index 0 = Hs, index 1 = router
   }
   // Hd <-> R(rows-1, cols-1)
   {
     NodeContainer lan(Hd, routers.Get(Idx(rows - 1, cols - 1, cols)));
-    NetDeviceContainer devs = csmaFast.Install(lan);
+    hdLanDevs = csmaFast.Install(lan);           // save to identify host LAN channel
     SetNextSubnet(addr, subnetId);
-    ifsHd = addr.Assign(devs);   // index 0 is Hd, index 1 is router
+    ifsHd = addr.Assign(hdLanDevs);              // index 0 = Hd, index 1 = router
   }
 
-  // --- 6) Application: UDP flow from Hs to Hd
-  const Ipv4Address hdIp = ifsHd.GetAddress(0); // <<< sink must bind to Hd’s IP
+  // --- 6) Register static neighbors (inline, routers only; skip host LANs)
+  {
+    // Identify the two host LAN channels so we can skip them
+    Ptr<Channel> hsLanCh = hsLanDevs.Get(0)->GetChannel();
+    Ptr<Channel> hdLanCh = hdLanDevs.Get(0)->GetChannel();
+
+    for (auto it = routers.Begin(); it != routers.End(); ++it) {  // routers only
+      Ptr<Node> node = *it;
+      Ptr<AntNetRoutingProtocol> antr = node->GetObject<AntNetRoutingProtocol>();
+      if (!antr) continue;
+
+      Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+      if (!ipv4) continue;
+
+      const uint32_t nIf = ipv4->GetNInterfaces();
+      for (uint32_t i = 0; i < nIf; ++i) {
+        Ptr<NetDevice> dev = ipv4->GetNetDevice(i);
+        if (!dev) continue;
+
+        Ptr<CsmaChannel> ch = DynamicCast<CsmaChannel>(dev->GetChannel());
+        if (!ch) continue;
+
+        // Skip Hs<->router and Hd<->router LANs
+        if (ch == hsLanCh || ch == hdLanCh) continue;
+
+        // For each other device on this inter-router CSMA segment…
+        for (uint32_t d = 0; d < ch->GetNDevices(); ++d) {
+          Ptr<NetDevice> otherDev = ch->GetDevice(d);
+          if (otherDev == dev) continue;
+
+          Ptr<Node> otherNode = otherDev->GetNode();
+          // Only form static-neighbor edges to other routers
+          if (!routers.Contains(otherNode->GetId())) continue;
+
+          Ptr<Ipv4> oipv4 = otherNode->GetObject<Ipv4>();
+          if (!oipv4) continue;
+
+          int32_t otherIf = oipv4->GetInterfaceForDevice(otherDev);
+          if (otherIf < 0) continue;
+
+          Ipv4InterfaceAddress oifa = oipv4->GetAddress(static_cast<uint32_t>(otherIf), 0);
+          Ipv4Address neighIp = oifa.GetLocal();
+          if (neighIp == Ipv4Address::GetAny() || neighIp == Ipv4Address("0.0.0.0"))
+            continue;
+
+          antr->AddStaticNeighbor(neighIp);  // router ↔ router only
+        }
+      }
+    }
+  }
+  // --- end static neighbor registration ---
+
+  // --- 7) Application: UDP flow from Hs to Hd
+  const Ipv4Address hdIp = ifsHd.GetAddress(0); // sink must bind to Hd’s IP
   const uint16_t port = 9000;
 
-  // Sink on Hd
   PacketSinkHelper sink("ns3::UdpSocketFactory", InetSocketAddress(hdIp, port));
   ApplicationContainer sinkApp = sink.Install(Hd);
   sinkApp.Start(Seconds(0.4));
   sinkApp.Stop(Seconds(simTime));
 
-  // OnOff on Hs
   OnOffHelper onoff("ns3::UdpSocketFactory", InetSocketAddress(hdIp, port));
   onoff.SetAttribute("DataRate", DataRateValue(DataRate("12Mbps")));
   onoff.SetAttribute("PacketSize", UintegerValue(400));
@@ -149,7 +201,7 @@ int main(int argc, char *argv[])
     csmaSlow.EnablePcapAll("antnet-mesh-slow", true);
   }
 
-  // --- 7) FlowMonitor for quick stats
+  // --- 8) FlowMonitor for quick stats
   FlowMonitorHelper fmh;
   Ptr<FlowMonitor> fm = fmh.InstallAll();
 
