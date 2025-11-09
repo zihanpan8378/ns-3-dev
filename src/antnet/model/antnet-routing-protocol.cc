@@ -106,6 +106,9 @@ void AntNetRoutingProtocol::Start() {
   if (m_running || m_ipv4 == nullptr) return;
   m_running = true;
   CreateSockets();
+
+  DiscoverAllNodes();
+
   // SendHello not scheduled when using static neighbor configuration in the examples.
   m_antEvent = Simulator::Schedule(Seconds(5), &AntNetRoutingProtocol::ScheduleAnt, this);
 }
@@ -178,71 +181,99 @@ void AntNetRoutingProtocol::RecvHello(Ptr<Socket> socket) {
 
 void AntNetRoutingProtocol::ScheduleAnt() {
   NS_LOG_INFO("ScheduleAnt node=" << GetObject<Node>()->GetId()
-               << " knownDestinations=" << m_knownDestinations.size()
+               << " knownDestinationNodes=" << m_knownDestinationNodes.size()
                << " neighbors=" << m_neighbors.size());
   LaunchAntsForKnownDestinations();
   m_antEvent = Simulator::Schedule(m_antPeriod, &AntNetRoutingProtocol::ScheduleAnt, this);
 }
 
 void AntNetRoutingProtocol::LaunchAntsForKnownDestinations() {
-  std::vector<Ipv4Address> candidates;
+  // Select destination using node ID
+  std::vector<uint32_t> candidates;
   std::vector<double> weights;
   double totalWeight = 0.0;
-  for (auto const& d : m_knownDestinations) {
-    if (IsMyAddress(d)) {
-      continue;
-    }
-    double w = m_ph.GetFlowWeight(d);
+  
+  for (auto const& nodeId : m_knownDestinationNodes) {
+    double w = m_ph.GetFlowWeightForNode(nodeId);
     if (w <= 0.0) {
       w = 1e-6; // fallback weight so destinations without history still participate
     }
-    candidates.push_back(d);
+    candidates.push_back(nodeId);
     weights.push_back(w);
     totalWeight += w;
   }
+  
   if (candidates.empty()) {
+    NS_LOG_WARN("LaunchAntsForKnownDestinations: no candidates!");
     return;
   }
+  
   if (totalWeight <= 0.0) {
     totalWeight = static_cast<double>(candidates.size());
     for (auto &w : weights) {
       w = 1.0;
     }
   }
+  
   double r = m_rng->GetValue(0.0, totalWeight);
   double acc = 0.0;
   for (size_t i = 0; i < candidates.size(); ++i) {
     acc += weights[i];
     if (r <= acc) {
-      SendForwardAnt(candidates[i]);
+      // Get the primary address of the destination node
+      Ipv4Address dstAddr = m_nodeIdToPrimaryAddress[candidates[i]];
+      NS_LOG_INFO("LaunchAntsForKnownDestinations: selected destNode=" << candidates[i] 
+                  << " dst=" << dstAddr << " weight=" << weights[i] 
+                  << " (total=" << candidates.size() << " candidates)");
+      SendForwardAnt(dstAddr);
       return;
     }
   }
-  SendForwardAnt(candidates.back());
+  
+  // Send to the last candidate node by default
+  Ipv4Address dstAddr = m_nodeIdToPrimaryAddress[candidates.back()];
+  NS_LOG_INFO("LaunchAntsForKnownDestinations: default selected destNode=" << candidates.back() 
+              << " dst=" << dstAddr);
+  SendForwardAnt(dstAddr);
 }
 
 void AntNetRoutingProtocol::SendForwardAnt(Ipv4Address dst) {
   auto neighbors = GetNeighborAddresses();
-  NS_LOG_INFO("SendForwardAnt: nNeighbors=" << neighbors.size());
   if (neighbors.empty()) return;
+  
+  // Convert destination IP to node ID
+  uint32_t dstNodeId;
+  auto it = m_addressToNodeId.find(dst);
+  if (it != m_addressToNodeId.end()) {
+    dstNodeId = it->second;
+  } else {
+    // If mapping not found, try real-time resolution
+    dstNodeId = ResolveNodeId(dst);
+    if (dstNodeId == std::numeric_limits<uint32_t>::max()) {
+      NS_LOG_WARN("Cannot resolve node ID for address " << dst);
+      return;
+    }
+  }
+  
   AntHeader h;
   h.SetType(ANT_FORWARD);
   h.SetSrc(GetPrimaryAddress());
   h.SetDst(dst);
   uint32_t srcNodeId = GetObject<Node>()->GetId();
-  uint32_t dstNodeId = ResolveNodeId(dst);
   h.SetId(srcNodeId, dstNodeId, m_antSeq++);
   h.SetLaunchTime(Simulator::Now().GetSeconds());
   h.PushHop(GetPrimaryAddress());
 
-  m_ph.EnsureDest(dst, neighbors);
-  Ipv4Address nh = m_ph.SampleNextHop(dst, m_betaAnt, m_rng->GetInteger(1, 0x7fffffff));
+  // Query pheromone table using node ID
+  m_ph.EnsureDestNode(dstNodeId, neighbors);
+  Ipv4Address nh = m_ph.SampleNextHopForNode(dstNodeId, m_betaAnt, m_rng->GetInteger(1, 0x7fffffff));
   if (nh == Ipv4Address()) return;
 
   Ptr<Packet> p = Create<Packet>();
   p->AddHeader(h);
   m_antSocket->SendTo(p, 0, InetSocketAddress(nh, m_antPort));
-  NS_LOG_INFO("SendForwardAnt id=" << h.GetId() << " dst=" << dst << " nh=" << nh);
+  NS_LOG_INFO("SendForwardAnt id=" << h.GetId() << " srcNode=" << srcNodeId 
+              << " destNode=" << dstNodeId << " dst=" << dst << " nh=" << nh);
 }
 
 void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
@@ -252,44 +283,172 @@ void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
   Ipv4Address prev = isa.GetIpv4();
 
   AntHeader h;
-  if (p->PeekHeader(h), p->RemoveHeader(h), true) {
+  p->PeekHeader(h);
+  NS_LOG_DEBUG("RecvAnt node=" << GetObject<Node>()->GetId() 
+               << " from=" << prev << " id=" << h.GetId());
+  
+  if (p->RemoveHeader(h), true) {
+    // Parse destination node ID
+    uint32_t dstNodeId;
+    auto it = m_addressToNodeId.find(h.GetDst());
+    if (it != m_addressToNodeId.end()) {
+      dstNodeId = it->second;
+    } else {
+      dstNodeId = ResolveNodeId(h.GetDst());
+    }
+    
     if (h.GetType() == ANT_FORWARD) { // ANT_FORWARD
       if (IsMyAddress(h.GetDst())) { // arrived at destination
-        NS_LOG_INFO("FWD arrives at dst=" << h.GetDst() << " -> turn BACKWARD id=" << h.GetId());
+        NS_LOG_INFO("FWD arrives at destNode=" << dstNodeId 
+                    << " (node " << GetObject<Node>()->GetId() << ")"
+                    << " dst=" << h.GetDst() << " -> turn BACKWARD id=" << h.GetId() 
+                    << " pathLen=" << h.GetPath().size());
         h.SetType(ANT_BACKWARD);
-        h.PushHop(GetPrimaryAddress());
+        // No need to PushHop current node, as the last one in the path is the sender
+        // Pop once directly to get the return address
         Ipv4Address back;
-        if (h.PopHop(back) && h.PopHop(back)) {
+        if (h.PopHop(back)) {
+          NS_LOG_INFO("BWD start from dest, sending back to " << back);
           Ptr<Packet> qq = Create<Packet>();
           qq->AddHeader(h);
           m_antSocket->SendTo(qq, 0, InetSocketAddress(back, m_antPort));
+        } else {
+          NS_LOG_WARN("BWD failed at dest id=" << h.GetId() << " - no hop in path");
         }
         return;
       } else { // relay
         auto path = h.GetPath();
-        if (!path.empty() && path.size() > 16) { return; }
-        h.PushHop(GetPrimaryAddress());
+        
+        // Check path length limit
+        if (!path.empty() && path.size() > 16) {
+          NS_LOG_WARN("FWD dropped id=" << h.GetId() << " - path too long (" << path.size() << ")");
+          return;
+        }
+        
+        // AntNet paper's cycle detection and handling
+        Ipv4Address myAddr = GetPrimaryAddress();
+        int cycleStartIndex = -1;
+        
+        // Find current node in path to determine cycle start
+        for (size_t i = 0; i < path.size(); ++i) {
+          if (path[i] == myAddr) {
+            cycleStartIndex = static_cast<int>(i);
+            break;
+          }
+        }
+        
+        if (cycleStartIndex >= 0) {
+          // Cycle detected
+          size_t cycleLength = path.size() - cycleStartIndex;
+          double antAge = Simulator::Now().GetSeconds() - h.GetLaunchTime();
+          // Use ant's elapsed time as basis for estimating cycle time
+          // Cycle time ≈ (cycle length / current path length) * ant age
+          double cycleLifetime = (static_cast<double>(cycleLength) / static_cast<double>(path.size() + 1)) * antAge;
+          
+          NS_LOG_INFO("FWD cycle detected id=" << h.GetId() 
+                      << " at=" << myAddr 
+                      << " cycleLen=" << cycleLength 
+                      << " antAge=" << antAge
+                      << " cycleTime=" << cycleLifetime);
+          
+          // If cycle lifetime > half of ant age, destroy the ant
+          if (cycleLifetime > antAge / 2.0) {
+            NS_LOG_WARN("FWD destroyed id=" << h.GetId() 
+                        << " - cycle too long (" << cycleLifetime 
+                        << "s > " << antAge/2.0 << "s)");
+            return;
+          }
+          
+          // Otherwise, pop cycle nodes from stack
+          std::vector<Ipv4Address> newPath;
+          for (int i = 0; i < cycleStartIndex; ++i) {
+            newPath.push_back(path[i]);
+          }
+          h.SetPath(newPath);
+          
+          NS_LOG_INFO("FWD cycle removed id=" << h.GetId() 
+                      << " - popped " << cycleLength << " nodes"
+                      << " newPathLen=" << newPath.size());
+        }
+        
+        h.PushHop(myAddr);
         auto nbs = GetNeighborAddresses();
-        m_ph.EnsureDest(h.GetDst(), nbs);
-        Ipv4Address nh = m_ph.SampleNextHop(h.GetDst(), m_betaAnt, m_rng->GetInteger(1, 0x7fffffff));
-        NS_LOG_INFO("FWD relay id=" << h.GetId() << " dst=" << h.GetDst() << " next=" << nh);
-        if (nh == Ipv4Address()) return;
+        
+        // Query pheromone table using node ID
+        m_ph.EnsureDestNode(dstNodeId, nbs);
+        Ipv4Address nh = m_ph.SampleNextHopForNode(dstNodeId, m_betaAnt, m_rng->GetInteger(1, 0x7fffffff));
+        NS_LOG_INFO("FWD relay id=" << h.GetId() << " destNode=" << dstNodeId 
+                    << " (node " << GetObject<Node>()->GetId() << ")"
+                    << " dst=" << h.GetDst() << " this=" << myAddr << " next=" << nh
+                    << " pathLen=" << h.GetPath().size() << " prev=" << prev);
+        if (nh == Ipv4Address()) {
+          NS_LOG_WARN("FWD dropped id=" << h.GetId() << " destNode=" << dstNodeId 
+                      << " - no next hop available");
+          return;
+        }
         Ptr<Packet> q = Create<Packet>();
         q->AddHeader(h);
-        m_antSocket->SendTo(q, 0, InetSocketAddress(nh, m_antPort));
+        int32_t sent = m_antSocket->SendTo(q, 0, InetSocketAddress(nh, m_antPort));
+        if (sent < 0) {
+          NS_LOG_WARN("FWD send failed id=" << h.GetId() << " to=" << nh 
+                      << " error=" << m_antSocket->GetErrno());
+        }
       }
     } else { // ANT_BACKWARD
       double T = Simulator::Now().GetSeconds() - h.GetLaunchTime();
-      NS_LOG_INFO("BWD id=" << h.GetId() << " dst=" << h.GetDst() << " T=" << T);
-      m_ph.ObserveRtt(h.GetDst(), T, m_eta);
-      double r = m_ph.GetReinforcement(h.GetDst(), T);
+      const auto& path = h.GetPath();
+      Ipv4Address myAddr = GetPrimaryAddress();
+      NS_LOG_INFO("BWD id=" << h.GetId() << " destNode=" << dstNodeId 
+                  << " (node " << GetObject<Node>()->GetId() << ")"
+                  << " dst=" << h.GetDst() << " T=" << T 
+                  << " pathLen=" << path.size() << " at=" << myAddr 
+                  << " prev=" << prev);
+      
+      // Update statistics using node ID
+      m_ph.ObserveRttForNode(dstNodeId, T, m_eta);
+      double r = m_ph.GetReinforcementForNode(dstNodeId, T);
       auto nbs = GetNeighborAddresses();
-      m_ph.Reinforce(h.GetDst(), prev, r, m_alphaLearn, nbs);
+      
+      // Convert prev (possibly a primary address) to link-local neighbor address
+      Ipv4Address actualNeighbor = prev;
+      // Check if prev is a primary address; if so, find the corresponding link-local address
+      auto it_nodeId = m_addressToNodeId.find(prev);
+      if (it_nodeId != m_addressToNodeId.end()) {
+        uint32_t senderNodeId = it_nodeId->second;
+        // Find address in neighbor list that belongs to the same node
+        for (const auto& nb : nbs) {
+          auto it_nb = m_addressToNodeId.find(nb);
+          if (it_nb != m_addressToNodeId.end() && it_nb->second == senderNodeId) {
+            actualNeighbor = nb;
+            NS_LOG_DEBUG("Converted prev=" << prev << " (node " << senderNodeId 
+                        << ") to neighbor=" << actualNeighbor);
+            break;
+          }
+        }
+      }
+      
+      // Reinforce using the actual neighbor address
+      m_ph.ReinforceNode(dstNodeId, actualNeighbor, r, m_alphaLearn, nbs);
+      
       Ipv4Address back;
-      if (h.PopHop(back) && h.PopHop(back)) {
-        Ptr<Packet> q = Create<Packet>();
-        q->AddHeader(h);
-        m_antSocket->SendTo(q, 0, InetSocketAddress(back, m_antPort));
+      NS_LOG_DEBUG("BWD before PopHop pathLen=" << h.GetPath().size());
+      if (h.PopHop(back)) {
+        NS_LOG_DEBUG("BWD after 1st PopHop: back=" << back << " pathLen=" << h.GetPath().size());
+        if (h.PopHop(back)) {
+          NS_LOG_DEBUG("BWD after 2nd PopHop: back=" << back << " pathLen=" << h.GetPath().size());
+          Ptr<Packet> q = Create<Packet>();
+          q->AddHeader(h);
+          int32_t sent = m_antSocket->SendTo(q, 0, InetSocketAddress(back, m_antPort));
+          if (sent < 0) {
+            NS_LOG_WARN("BWD send failed id=" << h.GetId() << " to=" << back);
+          } else {
+            NS_LOG_DEBUG("BWD sent id=" << h.GetId() << " to=" << back);
+          }
+        } else {
+          NS_LOG_INFO("BWD reached source id=" << h.GetId() << " - no more hops in path");
+        }
+      } else {
+        NS_LOG_WARN("BWD PopHop failed id=" << h.GetId() << " - empty path");
       }
     }
   }
@@ -311,20 +470,49 @@ Ptr<Ipv4Route> AntNetRoutingProtocol::RouteOutput(Ptr<Packet> p, const Ipv4Heade
                              Ptr<NetDevice> oif, Socket::SocketErrno& sockerr) {
   Ipv4Address dst = header.GetDestination();
   if (IsMyAddress(dst)) { sockerr = Socket::ERROR_NOROUTETOHOST; return nullptr; }
-  m_knownDestinations.insert(dst);
+  
+  // Convert destination IP to node ID
+  uint32_t dstNodeId;
+  auto it = m_addressToNodeId.find(dst);
+  if (it != m_addressToNodeId.end()) {
+    dstNodeId = it->second;
+  } else {
+    // Unknown destination, try real-time resolution
+    dstNodeId = ResolveNodeId(dst);
+    if (dstNodeId == std::numeric_limits<uint32_t>::max()) {
+      // Cannot resolve, fall back to old method
+      m_knownDestinations.insert(dst);
+      auto nbs = GetNeighborAddresses();
+      m_ph.EnsureDest(dst, nbs);
+      Ipv4Address nh = m_ph.SampleNextHop(dst, m_betaData, m_rng->GetInteger(1, 0x7fffffff));
+      Ptr<Ipv4Route> rt = BuildRoute(dst, nh);
+      if (rt) {
+        if (p) m_ph.AccumulateFlow(dst, static_cast<double>(p->GetSize()));
+        sockerr = Socket::ERROR_NOTERROR;
+        return rt;
+      }
+      sockerr = Socket::ERROR_NOROUTETOHOST;
+      return nullptr;
+    }
+    m_addressToNodeId[dst] = dstNodeId;
+    m_knownDestinationNodes.insert(dstNodeId);
+  }
+  
+  // Route using node ID
   auto nbs = GetNeighborAddresses();
-  m_ph.EnsureDest(dst, nbs);
-  Ipv4Address nh = m_ph.SampleNextHop(dst, m_betaData, m_rng->GetInteger(1, 0x7fffffff));
-  // NS_LOG_INFO("RouteOutput dst=" << dst << " nh=" << nh);
+  m_ph.EnsureDestNode(dstNodeId, nbs);
+  Ipv4Address nh = m_ph.SampleNextHopForNode(dstNodeId, m_betaData, m_rng->GetInteger(1, 0x7fffffff));
+  // NS_LOG_INFO("RouteOutput destNode=" << dstNodeId << " dst=" << dst << " nh=" << nh);
   Ptr<Ipv4Route> rt = BuildRoute(dst, nh);
   if (rt) {
     if (p) {
-      m_ph.AccumulateFlow(dst, static_cast<double>(p->GetSize()));
+      m_ph.AccumulateFlowForNode(dstNodeId, static_cast<double>(p->GetSize()));
     }
     sockerr = Socket::ERROR_NOTERROR;
     return rt;
   }
-  sockerr = Socket::ERROR_NOROUTETOHOST; return nullptr;
+  sockerr = Socket::ERROR_NOROUTETOHOST;
+  return nullptr;
 }
 
 bool AntNetRoutingProtocol::RouteInput(Ptr<const Packet> p, const Ipv4Header &header, Ptr<const NetDevice> idev,
@@ -341,13 +529,40 @@ bool AntNetRoutingProtocol::RouteInput(Ptr<const Packet> p, const Ipv4Header &he
     }
     return false;
   }
-  m_knownDestinations.insert(dst);
+  
+  // Convert destination IP to node ID
+  uint32_t dstNodeId;
+  auto it = m_addressToNodeId.find(dst);
+  if (it != m_addressToNodeId.end()) {
+    dstNodeId = it->second;
+  } else {
+    // Unknown destination, try real-time resolution
+    dstNodeId = ResolveNodeId(dst);
+    if (dstNodeId == std::numeric_limits<uint32_t>::max()) {
+      // Cannot resolve, fall back to old method
+      m_knownDestinations.insert(dst);
+      auto nbs = GetNeighborAddresses();
+      m_ph.EnsureDest(dst, nbs);
+      Ipv4Address nh = m_ph.SampleNextHop(dst, m_betaData, m_rng->GetInteger(1, 0x7fffffff));
+      Ptr<Ipv4Route> rt = BuildRoute(dst, nh);
+      if (rt) {
+        m_ph.AccumulateFlow(dst, static_cast<double>(p->GetSize()));
+        if (!ucb.IsNull()) { ucb(rt, p, header); return true; }
+      }
+      if (!ecb.IsNull()) ecb(p, header, Socket::ERROR_NOROUTETOHOST);
+      return false;
+    }
+    m_addressToNodeId[dst] = dstNodeId;
+    m_knownDestinationNodes.insert(dstNodeId);
+  }
+  
+  // Route using node ID
   auto nbs = GetNeighborAddresses();
-  m_ph.EnsureDest(dst, nbs);
-  Ipv4Address nh = m_ph.SampleNextHop(dst, m_betaData, m_rng->GetInteger(1, 0x7fffffff));
+  m_ph.EnsureDestNode(dstNodeId, nbs);
+  Ipv4Address nh = m_ph.SampleNextHopForNode(dstNodeId, m_betaData, m_rng->GetInteger(1, 0x7fffffff));
   Ptr<Ipv4Route> rt = BuildRoute(dst, nh);
   if (rt) {
-    m_ph.AccumulateFlow(dst, static_cast<double>(p->GetSize()));
+    m_ph.AccumulateFlowForNode(dstNodeId, static_cast<double>(p->GetSize()));
     if (!ucb.IsNull()) { ucb(rt, p, header); return true; }
   }
   if (!ecb.IsNull()) ecb(p, header, Socket::ERROR_NOROUTETOHOST);
@@ -445,6 +660,46 @@ std::vector<Ipv4Address> AntNetRoutingProtocol::GetNeighborAddresses() const {
 void AntNetRoutingProtocol::DumpPheromoneTable() const {
   NS_LOG_INFO("Node " << GetObject<Node>()->GetId()
                        << " PheromoneTable snapshot\n" << m_ph.DebugString());
+}
+
+void AntNetRoutingProtocol::DiscoverAllNodes() {
+  NS_LOG_INFO("DiscoverAllNodes on node=" << GetObject<Node>()->GetId());
+  
+  uint32_t myNodeId = GetObject<Node>()->GetId();
+  
+  for (NodeList::Iterator it = NodeList::Begin(); it != NodeList::End(); ++it) {
+    Ptr<Node> node = *it;
+    uint32_t nodeId = node->GetId();
+    
+    // Skip self
+    if (nodeId == myNodeId) continue;
+    
+    Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+    if (ipv4 == nullptr) continue;
+    
+    Ipv4Address primaryAddr;
+    
+    // Collect all addresses of the node and select primary address
+    for (uint32_t i = 1; i < ipv4->GetNInterfaces(); ++i) {  // Skip loopback interface
+      if (ipv4->GetNAddresses(i) > 0) {
+        Ipv4Address addr = ipv4->GetAddress(i, 0).GetLocal();
+        
+        // Use first non-loopback address as primary address
+        if (primaryAddr == Ipv4Address()) {
+          primaryAddr = addr;
+          m_nodeIdToPrimaryAddress[nodeId] = addr;
+          m_knownDestinationNodes.insert(nodeId);
+          NS_LOG_INFO("  Node " << nodeId << " primary address: " << addr);
+        }
+        
+        // Establish reverse mapping: all addresses map to node ID
+        m_addressToNodeId[addr] = nodeId;
+        NS_LOG_INFO("    Node " << nodeId << " address: " << addr);
+      }
+    }
+  }
+  
+  NS_LOG_INFO("Total known destination nodes: " << m_knownDestinationNodes.size());
 }
 
 } // namespace ns3

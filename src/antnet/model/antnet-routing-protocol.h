@@ -38,6 +38,7 @@ public:
 
   void AddStaticNeighbor(Ipv4Address neighbor);
   void DumpPheromoneTable() const;
+  void DiscoverAllNodesPublic() { DiscoverAllNodes(); }  // 公共接口用于手动调用
 
 private:
   void Start();
@@ -50,6 +51,7 @@ private:
   void RecvAnt(Ptr<Socket> socket);
   void ScheduleAnt();
   void LaunchAntsForKnownDestinations();
+  void DiscoverAllNodes();
 
   bool IsMyAddress(Ipv4Address a) const;
   Ipv4Address GetPrimaryAddress() const;
@@ -85,6 +87,11 @@ private:
 
   std::map<Ipv4Address, NeighborInfo> m_neighbors;
   std::set<Ipv4Address> m_knownDestinations;
+
+  // Node ID based routing
+  std::map<uint32_t, Ipv4Address> m_nodeIdToPrimaryAddress;  // NodeId -> Primary IP
+  std::map<Ipv4Address, uint32_t> m_addressToNodeId;         // Any IP -> NodeId
+  std::set<uint32_t> m_knownDestinationNodes;                // Known destination nodes
 
   PheromoneTable m_ph;
   uint32_t m_antSeq;

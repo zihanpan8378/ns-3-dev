@@ -22,7 +22,7 @@ int main (int argc, char *argv[])
   LogComponentEnableAll(LOG_PREFIX_NODE);
   LogComponentEnableAll(LOG_PREFIX_LEVEL);
 
-  double simTime = 60.0;     // Simulation time
+  double simTime = 7000.0;     // Simulation time
   bool   enablePcap = false; // Switch to true if PCAP capture is desired
 
   CommandLine cmd;
@@ -126,26 +126,45 @@ int main (int argc, char *argv[])
   antR3->AddStaticNeighbor(if_lan4.GetAddress(1)); // R3 -> H4
   antH4->AddStaticNeighbor(if_lan4.GetAddress(0)); // H4 -> R3
 
-  // Application: H0 sends UDP traffic to H4; H4 runs a UDP sink
-  uint16_t port = 9000;
-  ApplicationContainer sinkApp;
-  {
-    PacketSinkHelper sink("ns3::UdpSocketFactory",
-                          InetSocketAddress(if_lan4.GetAddress(1), port)); // Address of H4
-    sinkApp = sink.Install(H4);
-    sinkApp.Start(Seconds(0.5));
-  }
-  {
-    OnOffHelper onoff("ns3::UdpSocketFactory",
-                      InetSocketAddress(if_lan4.GetAddress(1), port));
-    onoff.SetAttribute("DataRate", DataRateValue(DataRate("10Mbps")));
-    onoff.SetAttribute("PacketSize", UintegerValue(512));
-    onoff.SetAttribute("OnTime",  StringValue("ns3::ConstantRandomVariable[Constant=1]"));
-    onoff.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
-    ApplicationContainer src = onoff.Install(H0);
-    src.Start(Seconds(1.0));
-    src.Stop(Seconds(simTime - 1));
-  }
+  // detect nodes and build ID mappings
+  std::cout << "\n=== Discovering all nodes and building node ID mappings ===" << std::endl;
+  antH0->DiscoverAllNodesPublic();
+  antR0->DiscoverAllNodesPublic();
+  antR1->DiscoverAllNodesPublic();
+  antR2->DiscoverAllNodesPublic();
+  antR3->DiscoverAllNodesPublic();
+  antH4->DiscoverAllNodesPublic();
+
+  // print node ID mappings
+  std::cout << "\n=== Node ID Mapping ===" << std::endl;
+  std::cout << "H0 ID: " << H0->GetId() << " (" << if_lan0.GetAddress(0) << ")" << std::endl;
+  std::cout << "R0 ID: " << R0->GetId() << " (" << if_lan0.GetAddress(1) << ")" << std::endl;
+  std::cout << "R1 ID: " << R1->GetId() << " (" << if_01.GetAddress(1) << ")" << std::endl;
+  std::cout << "R2 ID: " << R2->GetId() << " (" << if_12.GetAddress(1) << ")" << std::endl;
+  std::cout << "R3 ID: " << R3->GetId() << " (" << if_23.GetAddress(1) << ")" << std::endl;
+  std::cout << "H4 ID: " << H4->GetId() << " (" << if_lan4.GetAddress(1) << ")" << std::endl;
+  std::cout << "========================\n" << std::endl;
+
+  // // Application: H0 sends UDP traffic to H4; H4 runs a UDP sink
+  // uint16_t port = 9000;
+  // ApplicationContainer sinkApp;
+  // {
+  //   PacketSinkHelper sink("ns3::UdpSocketFactory",
+  //                         InetSocketAddress(if_lan4.GetAddress(1), port)); // Address of H4
+  //   sinkApp = sink.Install(H4);
+  //   sinkApp.Start(Seconds(0.5));
+  // }
+  // {
+  //   OnOffHelper onoff("ns3::UdpSocketFactory",
+  //                     InetSocketAddress(if_lan4.GetAddress(1), port));
+  //   onoff.SetAttribute("DataRate", DataRateValue(DataRate("10Mbps")));
+  //   onoff.SetAttribute("PacketSize", UintegerValue(512));
+  //   onoff.SetAttribute("OnTime",  StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+  //   onoff.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+  //   ApplicationContainer src = onoff.Install(H0);
+  //   src.Start(Seconds(1.0));
+  //   src.Stop(Seconds(simTime - 1));
+  // }
 
   if (enablePcap) {
     csma.EnablePcapAll("antnet-csma", true);
@@ -161,11 +180,11 @@ int main (int argc, char *argv[])
   antR3->DumpPheromoneTable();
   antH4->DumpPheromoneTable();
 
-  // Print simple stats: total received bytes and average throughput
-  uint64_t rxBytes = DynamicCast<PacketSink>(sinkApp.Get(0))->GetTotalRx();
-  double throughputMbps = (rxBytes * 8.0) / (simTime * 1e6);
-  std::cout << "[RESULT] RX bytes=" << rxBytes
-            << ", Avg throughput=" << throughputMbps << " Mbps" << std::endl;
+  // // Print simple stats: total received bytes and average throughput
+  // uint64_t rxBytes = DynamicCast<PacketSink>(sinkApp.Get(0))->GetTotalRx();
+  // double throughputMbps = (rxBytes * 8.0) / (simTime * 1e6);
+  // std::cout << "[RESULT] RX bytes=" << rxBytes
+  //           << ", Avg throughput=" << throughputMbps << " Mbps" << std::endl;
 
   Simulator::Destroy();
   return 0;

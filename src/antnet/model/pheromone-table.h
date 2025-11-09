@@ -24,12 +24,24 @@ struct LocalStats {
 
 class PheromoneTable {
 public:
+  // Node ID based API
+  void EnsureDestNode(uint32_t destNodeId, const std::vector<Ipv4Address>& neighbors);
+  Ipv4Address SampleNextHopForNode(uint32_t destNodeId, double beta, uint32_t seed) const;
+  void ReinforceNode(uint32_t destNodeId, Ipv4Address fromPrevHop, double r, double alpha,
+                     const std::vector<Ipv4Address>& neighbors);
+  void ObserveRttForNode(uint32_t destNodeId, double T, double eta);
+  double GetReinforcementForNode(uint32_t destNodeId, double T) const;
+  void AccumulateFlowForNode(uint32_t destNodeId, double amount);
+  double GetFlowWeightForNode(uint32_t destNodeId) const;
+  
+  // Legacy IP-based API
   void EnsureDest(Ipv4Address dest, const std::vector<Ipv4Address>& neighbors);
   Ipv4Address SampleNextHop(Ipv4Address dest, double beta, uint32_t seed) const;
   void Reinforce(Ipv4Address dest, Ipv4Address fromPrevHop, double r, double alpha,
                  const std::vector<Ipv4Address>& neighbors);
 
   const std::vector<NextHopEntry>* GetBucket(Ipv4Address dest) const;
+  const std::vector<NextHopEntry>* GetBucketForNode(uint32_t destNodeId) const;
 
   void ObserveRtt(Ipv4Address dest, double T, double eta);
   double GetReinforcement(Ipv4Address dest, double T) const;
@@ -38,6 +50,11 @@ public:
   std::string DebugString() const;
 
 private:
+  // Node ID based storage
+  std::unordered_map<uint32_t, std::vector<NextHopEntry>> m_tblByNode;
+  std::unordered_map<uint32_t, LocalStats> m_statsByNode;
+  
+  // Legacy IP-based storage
   std::unordered_map<uint32_t, std::vector<NextHopEntry>> m_tbl;
   std::unordered_map<uint32_t, LocalStats> m_stats;
 
