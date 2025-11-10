@@ -13,6 +13,21 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("AntNetCsmaGrid");
 
+
+static void SetLinkDelay(const NetDeviceContainer& ndc, Time delay)
+{
+  // A 2-node CSMA link yields two CsmaNetDevices sharing the same channel.
+  for (uint32_t i = 0; i < ndc.GetN(); ++i) {
+    Ptr<CsmaNetDevice> dev = DynamicCast<CsmaNetDevice>(ndc.Get(i));
+    if (!dev) continue;
+    Ptr<CsmaChannel> ch = DynamicCast<CsmaChannel>(dev->GetChannel());
+    if (ch) {
+      ch->SetAttribute("Delay", TimeValue(delay));
+      break; // both ends share the same channel; setting once is enough
+    }
+  }
+}
+
 int main (int argc, char *argv[])
 {
   LogComponentEnable("AntNetRoutingProtocol", LOG_LEVEL_INFO);
@@ -69,19 +84,32 @@ int main (int argc, char *argv[])
 
   // Horizontal links (rows)
   NetDeviceContainer link_01 = csma.Install(NodeContainer(routers.Get(0), routers.Get(1))); // R0-R1
+  SetLinkDelay(link_01, MilliSeconds(2));
   NetDeviceContainer link_12 = csma.Install(NodeContainer(routers.Get(1), routers.Get(2))); // R1-R2
+  SetLinkDelay(link_12, MilliSeconds(3));
   NetDeviceContainer link_34 = csma.Install(NodeContainer(routers.Get(3), routers.Get(4))); // R3-R4
+  SetLinkDelay(link_34, MilliSeconds(4));
   NetDeviceContainer link_45 = csma.Install(NodeContainer(routers.Get(4), routers.Get(5))); // R4-R5
+  SetLinkDelay(link_45, MilliSeconds(5));
   NetDeviceContainer link_67 = csma.Install(NodeContainer(routers.Get(6), routers.Get(7))); // R6-R7
+  SetLinkDelay(link_67, MilliSeconds(6));
   NetDeviceContainer link_78 = csma.Install(NodeContainer(routers.Get(7), routers.Get(8))); // R7-R8
+  SetLinkDelay(link_78, MilliSeconds(7));
+
 
   // Vertical links (columns)
   NetDeviceContainer link_03 = csma.Install(NodeContainer(routers.Get(0), routers.Get(3))); // R0-R3
+  SetLinkDelay(link_03, MilliSeconds(8));
   NetDeviceContainer link_36 = csma.Install(NodeContainer(routers.Get(3), routers.Get(6))); // R3-R6
+  SetLinkDelay(link_36, MilliSeconds(9));
   NetDeviceContainer link_14 = csma.Install(NodeContainer(routers.Get(1), routers.Get(4))); // R1-R4
+  SetLinkDelay(link_14, MilliSeconds(10));
   NetDeviceContainer link_47 = csma.Install(NodeContainer(routers.Get(4), routers.Get(7))); // R4-R7
+  SetLinkDelay(link_47, MilliSeconds(11));
   NetDeviceContainer link_25 = csma.Install(NodeContainer(routers.Get(2), routers.Get(5))); // R2-R5
+  SetLinkDelay(link_25, MilliSeconds(12));
   NetDeviceContainer link_58 = csma.Install(NodeContainer(routers.Get(5), routers.Get(8))); // R5-R8
+  SetLinkDelay(link_58, MilliSeconds(13));
 
   // Install IPv4 stack and configure AntNet as the routing protocol
   InternetStackHelper stack;
