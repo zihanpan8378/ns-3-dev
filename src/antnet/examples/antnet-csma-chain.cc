@@ -22,7 +22,7 @@ int main (int argc, char *argv[])
   LogComponentEnableAll(LOG_PREFIX_NODE);
   LogComponentEnableAll(LOG_PREFIX_LEVEL);
 
-  double simTime = 7000.0;     // Simulation time
+  double simTime = 1000.0;     // Simulation time
   bool   enablePcap = false; // Switch to true if PCAP capture is desired
 
   CommandLine cmd;

@@ -4,6 +4,7 @@
 #include "ns3/ipv4-address.h"
 #include "ns3/nstime.h"
 #include <string>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -47,7 +48,7 @@ public:
   double GetReinforcement(Ipv4Address dest, double T) const;
   void AccumulateFlow(Ipv4Address dest, double amount);
   double GetFlowWeight(Ipv4Address dest) const;
-  std::string DebugString() const;
+  std::string DebugString(const std::map<Ipv4Address, uint32_t>* addressToNodeId = nullptr) const;
 
 private:
   // Node ID based storage

@@ -22,14 +22,13 @@ build_lib_example(
 )
 
 build_lib_example(
-  NAME antnet-csma-mesh
-  SOURCE_FILES antnet-csma-mesh.cc
+  NAME antnet-csma-grid
+  SOURCE_FILES antnet-csma-grid.cc
   LIBRARIES_TO_LINK
     ${libantnet}
     ${libinternet}
     ${libcsma}
     ${libapplications}
-    ${libflow-monitor}
     ${libnetwork}
     ${libcore}
 )

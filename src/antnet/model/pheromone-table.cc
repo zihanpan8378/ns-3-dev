@@ -158,21 +158,47 @@ double PheromoneTable::GetFlowWeight(Ipv4Address dest) const {
   return it->second.flow;
 }
 
-std::string PheromoneTable::DebugString() const {
+std::string PheromoneTable::DebugString(const std::map<Ipv4Address, uint32_t>* addressToNodeId) const {
   std::ostringstream oss;
   oss.setf(std::ios::fixed);
   oss << std::setprecision(6);
+  
+  // Lambda to convert address to node ID string if mapping is available
+  auto addrToString = [addressToNodeId](const Ipv4Address& addr) -> std::string {
+    if (addressToNodeId) {
+      auto it = addressToNodeId->find(addr);
+      if (it != addressToNodeId->end()) {
+        std::ostringstream ss;
+        ss << addr << " (node " << it->second << ")";
+        return ss.str();
+      }
+    }
+    std::ostringstream ss;
+    ss << addr;
+    return ss.str();
+  };
   
   // Node ID based tables
   oss << "  m_tblByNode:\n";
   if (m_tblByNode.empty()) {
     oss << "    (empty)\n";
   } else {
+    // Create sorted vector of node IDs
+    std::vector<uint32_t> sortedNodeIds;
+    sortedNodeIds.reserve(m_tblByNode.size());
     for (auto const& kv : m_tblByNode) {
-      uint32_t nodeId = kv.first;
-      oss << "    destNode=" << nodeId << "\n";
-      for (auto const& entry : kv.second) {
-        oss << "      nh=" << entry.nh << " p=" << entry.p << "\n";
+      sortedNodeIds.push_back(kv.first);
+    }
+    std::sort(sortedNodeIds.begin(), sortedNodeIds.end());
+    
+    // Output in sorted order
+    for (uint32_t nodeId : sortedNodeIds) {
+      auto it = m_tblByNode.find(nodeId);
+      if (it != m_tblByNode.end()) {
+        oss << "    destNode=" << nodeId << "\n";
+        for (auto const& entry : it->second) {
+          oss << "      nh=" << addrToString(entry.nh) << " p=" << entry.p << "\n";
+        }
       }
     }
   }
@@ -180,16 +206,27 @@ std::string PheromoneTable::DebugString() const {
   if (m_statsByNode.empty()) {
     oss << "    (empty)\n";
   } else {
+    // Create sorted vector of node IDs
+    std::vector<uint32_t> sortedNodeIds;
+    sortedNodeIds.reserve(m_statsByNode.size());
     for (auto const& kv : m_statsByNode) {
-      uint32_t nodeId = kv.first;
-      const auto& st = kv.second;
-      oss << "    destNode=" << nodeId
-          << " mu=" << st.mu
-          << " sigma2=" << st.sigma2
-          << " wbest=" << st.wbest
-          << " wcount=" << st.wcount
-          << " flow=" << st.flow
-          << "\n";
+      sortedNodeIds.push_back(kv.first);
+    }
+    std::sort(sortedNodeIds.begin(), sortedNodeIds.end());
+    
+    // Output in sorted order
+    for (uint32_t nodeId : sortedNodeIds) {
+      auto it = m_statsByNode.find(nodeId);
+      if (it != m_statsByNode.end()) {
+        const auto& st = it->second;
+        oss << "    destNode=" << nodeId
+            << " mu=" << st.mu
+            << " sigma2=" << st.sigma2
+            << " wbest=" << st.wbest
+            << " wcount=" << st.wcount
+            << " flow=" << st.flow
+            << "\n";
+      }
     }
   }
   
@@ -200,7 +237,7 @@ std::string PheromoneTable::DebugString() const {
       Ipv4Address dest(kv.first);
       oss << "    dest=" << dest << "\n";
       for (auto const& entry : kv.second) {
-        oss << "      nh=" << entry.nh << " p=" << entry.p << "\n";
+        oss << "      nh=" << addrToString(entry.nh) << " p=" << entry.p << "\n";
       }
     }
   }

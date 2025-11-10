@@ -12,6 +12,7 @@
 #include "ns3/node.h"  // for GetId()
 #include "ns3/node-list.h"
 #include "ns3/net-device.h"
+#include "ns3/socket.h"  // for SocketPriorityTag
 #include <limits>
 
 namespace ns3 {
@@ -45,7 +46,7 @@ TypeId AntNetRoutingProtocol::GetTypeId() {
                   MakeTimeAccessor(&AntNetRoutingProtocol::m_antPeriod),
                   MakeTimeChecker())
     .AddAttribute("BetaAnt", "Exponent for ant next-hop sampling",
-                  DoubleValue(1.0),
+                  DoubleValue(0.5),
                   MakeDoubleAccessor(&AntNetRoutingProtocol::m_betaAnt),
                   MakeDoubleChecker<double>())
     .AddAttribute("BetaData", "Exponent for data next-hop sampling",
@@ -74,7 +75,7 @@ AntNetRoutingProtocol::AntNetRoutingProtocol()
     m_helloSocket(nullptr),
     m_antPort(5001),
     m_helloPort(5002),
-    m_betaAnt(1.0),
+    m_betaAnt(0.5),
     m_betaData(1.3),
     m_alphaLearn(0.4),
     m_eta(0.1),
@@ -215,25 +216,39 @@ void AntNetRoutingProtocol::LaunchAntsForKnownDestinations() {
     }
   }
   
-  double r = m_rng->GetValue(0.0, totalWeight);
-  double acc = 0.0;
-  for (size_t i = 0; i < candidates.size(); ++i) {
-    acc += weights[i];
-    if (r <= acc) {
-      // Get the primary address of the destination node
-      Ipv4Address dstAddr = m_nodeIdToPrimaryAddress[candidates[i]];
-      NS_LOG_INFO("LaunchAntsForKnownDestinations: selected destNode=" << candidates[i] 
-                  << " dst=" << dstAddr << " weight=" << weights[i] 
-                  << " (total=" << candidates.size() << " candidates)");
-      SendForwardAnt(dstAddr);
-      return;
+  // Use epsilon-greedy strategy: 20% exploration, 80% exploitation
+  uint32_t selectedNodeId;
+  double explorationProb = 0.2;
+  
+  if (m_rng->GetValue(0.0, 1.0) < explorationProb) {
+    // Exploration: uniform random selection
+    int idx = static_cast<int>(m_rng->GetValue(0.0, static_cast<double>(candidates.size())));
+    if (idx >= static_cast<int>(candidates.size())) {
+      idx = static_cast<int>(candidates.size()) - 1;
     }
+    selectedNodeId = candidates[idx];
+    NS_LOG_INFO("LaunchAntsForKnownDestinations: EXPLORATION - selected destNode=" << selectedNodeId 
+                << " (uniform random from " << candidates.size() << " candidates)");
+  } else {
+    // Exploitation: weighted selection based on flow
+    double r = m_rng->GetValue(0.0, totalWeight);
+    double acc = 0.0;
+    size_t selectedIdx = candidates.size() - 1;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+      acc += weights[i];
+      if (r <= acc) {
+        selectedIdx = i;
+        break;
+      }
+    }
+    selectedNodeId = candidates[selectedIdx];
+    NS_LOG_INFO("LaunchAntsForKnownDestinations: EXPLOITATION - selected destNode=" << selectedNodeId 
+                << " weight=" << weights[selectedIdx] 
+                << " (total=" << candidates.size() << " candidates)");
   }
   
-  // Send to the last candidate node by default
-  Ipv4Address dstAddr = m_nodeIdToPrimaryAddress[candidates.back()];
-  NS_LOG_INFO("LaunchAntsForKnownDestinations: default selected destNode=" << candidates.back() 
-              << " dst=" << dstAddr);
+  // Get the primary address of the destination node
+  Ipv4Address dstAddr = m_nodeIdToPrimaryAddress[selectedNodeId];
   SendForwardAnt(dstAddr);
 }
 
@@ -271,9 +286,17 @@ void AntNetRoutingProtocol::SendForwardAnt(Ipv4Address dst) {
 
   Ptr<Packet> p = Create<Packet>();
   p->AddHeader(h);
+  
+  // Set priority for Forward Ant: same as data packets (priority 0 - Best Effort)
+  // According to AntNet paper, Forward Ants share the same queue as data packets
+  SocketPriorityTag priorityTag;
+  priorityTag.SetPriority(0);  // Best Effort priority
+  p->AddPacketTag(priorityTag);
+  
   m_antSocket->SendTo(p, 0, InetSocketAddress(nh, m_antPort));
   NS_LOG_INFO("SendForwardAnt id=" << h.GetId() << " srcNode=" << srcNodeId 
-              << " destNode=" << dstNodeId << " dst=" << dst << " nh=" << nh);
+              << " destNode=" << dstNodeId << " dst=" << dst << " nh=" << nh
+              << " priority=0 (Best Effort, same as data packets)");
 }
 
 void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
@@ -304,14 +327,24 @@ void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
                     << " dst=" << h.GetDst() << " -> turn BACKWARD id=" << h.GetId() 
                     << " pathLen=" << h.GetPath().size());
         h.SetType(ANT_BACKWARD);
-        // No need to PushHop current node, as the last one in the path is the sender
-        // Pop once directly to get the return address
+        // The path contains all intermediate nodes but not the destination
+        // The last element in path is the previous hop (sender of this packet)
+        // We need to send back to that address
         Ipv4Address back;
         if (h.PopHop(back)) {
-          NS_LOG_INFO("BWD start from dest, sending back to " << back);
+          NS_LOG_INFO("BWD start from dest, sending back to " << back 
+                      << " pathLen=" << h.GetPath().size());
           Ptr<Packet> qq = Create<Packet>();
           qq->AddHeader(h);
+          
+          // Set high priority for Backward Ant (priority 7 - highest)
+          // According to AntNet paper, Backward Ants have their own high-priority queue
+          SocketPriorityTag priorityTag;
+          priorityTag.SetPriority(7);  // Highest priority
+          qq->AddPacketTag(priorityTag);
+          
           m_antSocket->SendTo(qq, 0, InetSocketAddress(back, m_antPort));
+          NS_LOG_INFO("BWD packet sent with priority=7 (high priority queue)");
         } else {
           NS_LOG_WARN("BWD failed at dest id=" << h.GetId() << " - no hop in path");
         }
@@ -319,8 +352,8 @@ void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
       } else { // relay
         auto path = h.GetPath();
         
-        // Check path length limit
-        if (!path.empty() && path.size() > 16) {
+        // Check path length limit - more lenient for chain topologies
+        if (!path.empty() && path.size() > 20) {
           NS_LOG_WARN("FWD dropped id=" << h.GetId() << " - path too long (" << path.size() << ")");
           return;
         }
@@ -341,25 +374,23 @@ void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
           // Cycle detected
           size_t cycleLength = path.size() - cycleStartIndex;
           double antAge = Simulator::Now().GetSeconds() - h.GetLaunchTime();
-          // Use ant's elapsed time as basis for estimating cycle time
-          // Cycle time ≈ (cycle length / current path length) * ant age
-          double cycleLifetime = (static_cast<double>(cycleLength) / static_cast<double>(path.size() + 1)) * antAge;
           
           NS_LOG_INFO("FWD cycle detected id=" << h.GetId() 
                       << " at=" << myAddr 
                       << " cycleLen=" << cycleLength 
                       << " antAge=" << antAge
-                      << " cycleTime=" << cycleLifetime);
+                      << " pathLen=" << path.size());
           
-          // If cycle lifetime > half of ant age, destroy the ant
-          if (cycleLifetime > antAge / 2.0) {
+          // More lenient cycle handling: only destroy if path gets too long
+          // or ant has been alive too long (indicating it's truly stuck)
+          if (path.size() >= 12 || antAge > 1.0) {
             NS_LOG_WARN("FWD destroyed id=" << h.GetId() 
-                        << " - cycle too long (" << cycleLifetime 
-                        << "s > " << antAge/2.0 << "s)");
+                        << " - path too long (" << path.size() 
+                        << ") or ant too old (" << antAge << "s)");
             return;
           }
           
-          // Otherwise, pop cycle nodes from stack
+          // Otherwise, pop cycle nodes from stack and continue
           std::vector<Ipv4Address> newPath;
           for (int i = 0; i < cycleStartIndex; ++i) {
             newPath.push_back(path[i]);
@@ -388,6 +419,12 @@ void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
         }
         Ptr<Packet> q = Create<Packet>();
         q->AddHeader(h);
+        
+        // Set priority for Forward Ant: same as data packets (priority 0 - Best Effort)
+        SocketPriorityTag priorityTag;
+        priorityTag.SetPriority(0);  // Best Effort priority
+        q->AddPacketTag(priorityTag);
+        
         int32_t sent = m_antSocket->SendTo(q, 0, InetSocketAddress(nh, m_antPort));
         if (sent < 0) {
           NS_LOG_WARN("FWD send failed id=" << h.GetId() << " to=" << nh 
@@ -430,25 +467,41 @@ void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
       // Reinforce using the actual neighbor address
       m_ph.ReinforceNode(dstNodeId, actualNeighbor, r, m_alphaLearn, nbs);
       
-      Ipv4Address back;
-      NS_LOG_DEBUG("BWD before PopHop pathLen=" << h.GetPath().size());
-      if (h.PopHop(back)) {
-        NS_LOG_DEBUG("BWD after 1st PopHop: back=" << back << " pathLen=" << h.GetPath().size());
+      // Check if we've reached the source node (ant originator)
+      uint32_t myNodeId = GetObject<Node>()->GetId();
+      uint32_t srcNodeId = h.GetId().srcNodeId;
+      
+      if (myNodeId == srcNodeId) {
+        // We are the source node - ant has completed its round trip
+        NS_LOG_INFO("BWD reached source id=" << h.GetId() << " at node " << myNodeId
+                    << " - ant completed successfully");
+      } else {
+        // Not the source - continue forwarding backward
+        Ipv4Address back;
         if (h.PopHop(back)) {
-          NS_LOG_DEBUG("BWD after 2nd PopHop: back=" << back << " pathLen=" << h.GetPath().size());
+          NS_LOG_INFO("BWD id=" << h.GetId() << " destNode=" << dstNodeId 
+                      << " (node " << myNodeId << ")"
+                      << " dst=" << h.GetDst() << " T=" << T 
+                      << " pathLen=" << h.GetPath().size()
+                      << " at=" << GetPrimaryAddress() << " prev=" << prev
+                      << " sendingTo=" << back);
           Ptr<Packet> q = Create<Packet>();
           q->AddHeader(h);
+          
+          // Set high priority for Backward Ant (priority 7 - highest)
+          // According to AntNet paper, Backward Ants have their own high-priority queue
+          SocketPriorityTag priorityTag;
+          priorityTag.SetPriority(7);  // Highest priority
+          q->AddPacketTag(priorityTag);
+          
           int32_t sent = m_antSocket->SendTo(q, 0, InetSocketAddress(back, m_antPort));
           if (sent < 0) {
             NS_LOG_WARN("BWD send failed id=" << h.GetId() << " to=" << back);
-          } else {
-            NS_LOG_DEBUG("BWD sent id=" << h.GetId() << " to=" << back);
           }
         } else {
-          NS_LOG_INFO("BWD reached source id=" << h.GetId() << " - no more hops in path");
+          NS_LOG_WARN("BWD PopHop failed id=" << h.GetId() << " at node " << myNodeId
+                      << " - empty path but not source node (srcNode=" << srcNodeId << ")");
         }
-      } else {
-        NS_LOG_WARN("BWD PopHop failed id=" << h.GetId() << " - empty path");
       }
     }
   }
@@ -659,7 +712,7 @@ std::vector<Ipv4Address> AntNetRoutingProtocol::GetNeighborAddresses() const {
 
 void AntNetRoutingProtocol::DumpPheromoneTable() const {
   NS_LOG_INFO("Node " << GetObject<Node>()->GetId()
-                       << " PheromoneTable snapshot\n" << m_ph.DebugString());
+                       << " PheromoneTable snapshot\n" << m_ph.DebugString(&m_addressToNodeId));
 }
 
 void AntNetRoutingProtocol::DiscoverAllNodes() {
