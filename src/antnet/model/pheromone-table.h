@@ -35,6 +35,8 @@ public:
   void AccumulateFlowForNode(uint32_t destNodeId, double amount);
   double GetFlowWeightForNode(uint32_t destNodeId) const;
   
+  void DecayPheromones(double factor);
+  
   // Legacy IP-based API
   void EnsureDest(Ipv4Address dest, const std::vector<Ipv4Address>& neighbors);
   Ipv4Address SampleNextHop(Ipv4Address dest, double beta, uint32_t seed) const;

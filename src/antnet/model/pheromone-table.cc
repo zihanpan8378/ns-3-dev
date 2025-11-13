@@ -378,4 +378,24 @@ double PheromoneTable::GetFlowWeightForNode(uint32_t destNodeId) const {
   return it->second.flow;
 }
 
+void PheromoneTable::DecayPheromones(double factor) {
+  if (factor <= 0.0 || factor >= 1.0) return;
+  
+  for (auto& kv : m_tblByNode) {
+    auto& bucket = kv.second;
+    for (auto& entry : bucket) {
+      entry.p *= factor;
+    }
+    Normalize(bucket);
+  }
+  
+  for (auto& kv : m_tbl) {
+    auto& bucket = kv.second;
+    for (auto& entry : bucket) {
+      entry.p *= factor;
+    }
+    Normalize(bucket);
+  }
+}
+
 } // namespace ns3

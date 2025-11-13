@@ -52,6 +52,7 @@ private:
   void ScheduleAnt();
   void LaunchAntsForKnownDestinations();
   void DiscoverAllNodes();
+  void ApplyPheromoneDecay();
 
   bool IsMyAddress(Ipv4Address a) const;
   Ipv4Address GetPrimaryAddress() const;
@@ -68,6 +69,7 @@ private:
   Ptr<Socket> m_helloSocket;
   EventId m_helloEvent;
   EventId m_antEvent;
+  EventId m_decayEvent;
 
   uint16_t m_antPort;
   uint16_t m_helloPort;
@@ -76,9 +78,11 @@ private:
   double m_alphaLearn;
   double m_eta;
   double m_phi;
+  double m_decayFactor;
   Time m_helloPeriod;
   Time m_neighborTimeout;
   Time m_antPeriod;
+  Time m_decayPeriod;
 
   struct NeighborInfo {
     Time lastSeen;

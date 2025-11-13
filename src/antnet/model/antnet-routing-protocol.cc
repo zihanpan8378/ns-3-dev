@@ -64,7 +64,15 @@ TypeId AntNetRoutingProtocol::GetTypeId() {
     .AddAttribute("Phi", "Power map for data route sampling",
                   DoubleValue(1.2),
                   MakeDoubleAccessor(&AntNetRoutingProtocol::m_phi),
-                  MakeDoubleChecker<double>());
+                  MakeDoubleChecker<double>())
+    .AddAttribute("DecayFactor", "Pheromone decay factor per period",
+                  DoubleValue(0.95),
+                  MakeDoubleAccessor(&AntNetRoutingProtocol::m_decayFactor),
+                  MakeDoubleChecker<double>())
+    .AddAttribute("DecayPeriod", "Interval to apply pheromone decay",
+                  TimeValue(Seconds(5.0)),
+                  MakeTimeAccessor(&AntNetRoutingProtocol::m_decayPeriod),
+                  MakeTimeChecker());
   return tid;
 }
 
@@ -80,9 +88,11 @@ AntNetRoutingProtocol::AntNetRoutingProtocol()
     m_alphaLearn(0.4),
     m_eta(0.1),
     m_phi(1.2),
+    m_decayFactor(0.9),
     m_helloPeriod(Seconds(1.0)),
     m_neighborTimeout(Seconds(3.0)),
-    m_antPeriod(Seconds(1.0)),
+    m_antPeriod(Seconds(5.0)),
+    m_decayPeriod(Seconds(5.0)),
     m_antSeq(1)
 {
   m_rng = CreateObject<UniformRandomVariable>();
@@ -110,8 +120,8 @@ void AntNetRoutingProtocol::Start() {
 
   DiscoverAllNodes();
 
-  // SendHello not scheduled when using static neighbor configuration in the examples.
-  m_antEvent = Simulator::Schedule(Seconds(5), &AntNetRoutingProtocol::ScheduleAnt, this);
+  m_antEvent = Simulator::Schedule(m_antPeriod, &AntNetRoutingProtocol::ScheduleAnt, this);
+  m_decayEvent = Simulator::Schedule(m_decayPeriod, &AntNetRoutingProtocol::ApplyPheromoneDecay, this);
 }
 
 void AntNetRoutingProtocol::Stop() {
@@ -121,6 +131,7 @@ void AntNetRoutingProtocol::Stop() {
   if (m_helloSocket) { m_helloSocket->Close(); m_helloSocket = nullptr; }
   if (m_helloEvent.IsPending()) m_helloEvent.Cancel();
   if (m_antEvent.IsPending()) m_antEvent.Cancel();
+  if (m_decayEvent.IsPending()) m_decayEvent.Cancel();
 }
 
 void AntNetRoutingProtocol::CreateSockets() {
@@ -753,6 +764,15 @@ void AntNetRoutingProtocol::DiscoverAllNodes() {
   }
   
   NS_LOG_INFO("Total known destination nodes: " << m_knownDestinationNodes.size());
+}
+
+void AntNetRoutingProtocol::ApplyPheromoneDecay() {
+  if (!m_running) return;
+  
+  m_ph.DecayPheromones(m_decayFactor);
+  NS_LOG_INFO("Applied pheromone decay with factor " << m_decayFactor);
+  
+  m_decayEvent = Simulator::Schedule(m_decayPeriod, &AntNetRoutingProtocol::ApplyPheromoneDecay, this);
 }
 
 } // namespace ns3
