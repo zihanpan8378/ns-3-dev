@@ -22,7 +22,7 @@ int main (int argc, char *argv[])
   LogComponentEnableAll(LOG_PREFIX_NODE);
   LogComponentEnableAll(LOG_PREFIX_LEVEL);
 
-  double simTime = 1000.0;     // Simulation time
+  double simTime = 7.0;     // Simulation time
   bool   enablePcap = false; // Switch to true if PCAP capture is desired
 
   CommandLine cmd;
@@ -125,15 +125,6 @@ int main (int argc, char *argv[])
   antR3->AddStaticNeighbor(if_23.GetAddress(0)); // R3 -> R2
   antR3->AddStaticNeighbor(if_lan4.GetAddress(1)); // R3 -> H4
   antH4->AddStaticNeighbor(if_lan4.GetAddress(0)); // H4 -> R3
-
-  // detect nodes and build ID mappings
-  std::cout << "\n=== Discovering all nodes and building node ID mappings ===" << std::endl;
-  antH0->DiscoverAllNodesPublic();
-  antR0->DiscoverAllNodesPublic();
-  antR1->DiscoverAllNodesPublic();
-  antR2->DiscoverAllNodesPublic();
-  antR3->DiscoverAllNodesPublic();
-  antH4->DiscoverAllNodesPublic();
 
   // print node ID mappings
   std::cout << "\n=== Node ID Mapping ===" << std::endl;

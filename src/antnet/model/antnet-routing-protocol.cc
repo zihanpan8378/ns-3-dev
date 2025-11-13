@@ -383,21 +383,21 @@ void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
         
         if (cycleStartIndex >= 0) {
           // Cycle detected
-          size_t cycleLength = path.size() - cycleStartIndex;
+          // size_t cycleLength = path.size() - cycleStartIndex;
           double antAge = Simulator::Now().GetSeconds() - h.GetLaunchTime();
           
-          NS_LOG_INFO("FWD cycle detected id=" << h.GetId() 
-                      << " at=" << myAddr 
-                      << " cycleLen=" << cycleLength 
-                      << " antAge=" << antAge
-                      << " pathLen=" << path.size());
+          // NS_LOG_INFO("FWD cycle detected id=" << h.GetId() 
+          //             << " at=" << myAddr 
+          //             << " cycleLen=" << cycleLength 
+          //             << " antAge=" << antAge
+          //             << " pathLen=" << path.size());
           
           // More lenient cycle handling: only destroy if path gets too long
           // or ant has been alive too long (indicating it's truly stuck)
           if (path.size() >= 12 || antAge > 1.0) {
-            NS_LOG_WARN("FWD destroyed id=" << h.GetId() 
-                        << " - path too long (" << path.size() 
-                        << ") or ant too old (" << antAge << "s)");
+            // NS_LOG_WARN("FWD destroyed id=" << h.GetId() 
+            //             << " - path too long (" << path.size() 
+            //             << ") or ant too old (" << antAge << "s)");
             return;
           }
           
@@ -408,9 +408,9 @@ void AntNetRoutingProtocol::RecvAnt(Ptr<Socket> socket) {
           }
           h.SetPath(newPath);
           
-          NS_LOG_INFO("FWD cycle removed id=" << h.GetId() 
-                      << " - popped " << cycleLength << " nodes"
-                      << " newPathLen=" << newPath.size());
+          // NS_LOG_INFO("FWD cycle removed id=" << h.GetId() 
+          //             << " - popped " << cycleLength << " nodes"
+          //             << " newPathLen=" << newPath.size());
         }
         
         h.PushHop(myAddr);
@@ -753,12 +753,12 @@ void AntNetRoutingProtocol::DiscoverAllNodes() {
           primaryAddr = addr;
           m_nodeIdToPrimaryAddress[nodeId] = addr;
           m_knownDestinationNodes.insert(nodeId);
-          NS_LOG_INFO("  Node " << nodeId << " primary address: " << addr);
+          // NS_LOG_INFO("  Node " << nodeId << " primary address: " << addr);
         }
         
         // Establish reverse mapping: all addresses map to node ID
         m_addressToNodeId[addr] = nodeId;
-        NS_LOG_INFO("    Node " << nodeId << " address: " << addr);
+        // NS_LOG_INFO("    Node " << nodeId << " address: " << addr);
       }
     }
   }

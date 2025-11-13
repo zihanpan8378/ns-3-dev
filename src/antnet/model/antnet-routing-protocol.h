@@ -38,7 +38,7 @@ public:
 
   void AddStaticNeighbor(Ipv4Address neighbor);
   void DumpPheromoneTable() const;
-  void DiscoverAllNodesPublic() { DiscoverAllNodes(); }  // 公共接口用于手动调用
+  void DiscoverAllNodesPublic() { DiscoverAllNodes(); }
 
 private:
   void Start();
