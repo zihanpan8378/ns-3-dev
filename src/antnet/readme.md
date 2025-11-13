@@ -22,7 +22,7 @@ Build the ns3 simulator
 
 Run antnet examples
 ``` bash
-./ns3 run antnet-csma-chain
+./ns3 run antnet-csma-grid
 ```
 
 AntNet is implemented in `ns-3-dev/src/antnet` with this scructure:
@@ -39,7 +39,20 @@ src/antnet/
     antnet-helper.h                 # A routing helper to install and configure AntNet on nodes.
     antnet-helper.cc
   examples/
-    antnet-wifi-adhoc.cc            # Ad-hoc Wi-Fi multihop demo that exercises AntNet routing.
-    antnet-csma-chain.cc            # Wired CSMA chain demo showing multi-subnet, multi-hop learning.
-    antnet-csma-mesh.cc             # Wired CSMA 3×3 mesh demo with a slow link to visualize path choice.
+    antnet-csma-chain.cc            # Wired CSMA chain demo .
+    antnet-csma-grid.cc             # Wired CSMA 3×3 mesh demo .
 ```
+
+# Milestones
+## Milestone 1 deliverables:
+- A structure of AntNet implementation in ns-3 simulator with basic functionalities of sending and receiving ants.
+- An example of AntNet on wired chain topology and grid topology.
+- (not deliverable) We had tried the existing AntNet implementation on ns-2.34 but it was hard to set up the environment and run the code since ns-2.34 only compiles on GCC 4. So we decided to re-implement AntNet in ns-3 from scratch based on the original paper.
+## Milestone 2 deliverables:
+- Complete AntNet implementation with features mentioned in the original paper:
+  - Ant destination selection based on traffic load.
+  - Pheromone decay mechanism.
+  - Cycle detection and handling.
+- A formulation of the original Antnet algorithm and the two fault tolerance add-ons in the same set of notations (in report.pdf).
+## Milestone 3 deliverables:
+- Not implemented yet. Should have the implementation of the two fault tolerance add-ons and a wireless example of AntNet on Wi-Fi adhoc network.
