@@ -53,6 +53,8 @@ src/antnet/
   - Ant destination selection based on traffic load.
   - Pheromone decay mechanism.
   - Cycle detection and handling.
+- Logging the pheromone table changes over time.
+- A configuration file to implement any network topology provided in a configuration file.
 - A formulation of the original Antnet algorithm and the two fault tolerance add-ons in the same set of notations (in report.pdf).
 ## Milestone 3 deliverables:
 - Not implemented yet. Should have the implementation of the two fault tolerance add-ons and a wireless example of AntNet on Wi-Fi adhoc network.
