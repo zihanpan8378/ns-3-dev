@@ -32,3 +32,29 @@ build_lib_example(
     ${libnetwork}
     ${libcore}
 )
+
+build_lib_example(
+  NAME antnet-simplenet
+  SOURCE_FILES antnet-simplenet.cc
+  LIBRARIES_TO_LINK
+    ${libantnet}
+    ${libinternet}
+    ${libcsma}
+    ${libapplications}
+    ${libflow-monitor}
+    ${libnetwork}
+    ${libcore}
+)
+
+build_lib_example(
+  NAME antnet-configurable
+  SOURCE_FILES antnet-configurable.cc
+  LIBRARIES_TO_LINK
+    ${libantnet}
+    ${libinternet}
+    ${libcsma}
+    ${libapplications}
+    ${libflow-monitor}
+    ${libnetwork}
+    ${libcore}
+)

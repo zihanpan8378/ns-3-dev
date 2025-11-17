@@ -715,6 +715,11 @@ void AntNetRoutingProtocol::DumpPheromoneTable() const {
                        << " PheromoneTable snapshot\n" << m_ph.DebugString(&m_addressToNodeId));
 }
 
+void AntNetRoutingProtocol::DumpPheromoneTableToStream(std::ostream& os) const {
+  os << "Node " << GetObject<Node>()->GetId()
+     << " PheromoneTable snapshot\n" << m_ph.DebugString(&m_addressToNodeId);
+}
+
 void AntNetRoutingProtocol::DiscoverAllNodes() {
   NS_LOG_INFO("DiscoverAllNodes on node=" << GetObject<Node>()->GetId());
   

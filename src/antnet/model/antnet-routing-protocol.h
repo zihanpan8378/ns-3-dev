@@ -38,6 +38,7 @@ public:
 
   void AddStaticNeighbor(Ipv4Address neighbor);
   void DumpPheromoneTable() const;
+  void DumpPheromoneTableToStream(std::ostream& os) const;
   void DiscoverAllNodesPublic() { DiscoverAllNodes(); }  // 公共接口用于手动调用
 
 private:
