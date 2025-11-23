@@ -5,6 +5,7 @@
 #include "ipv4-routing-protocol.h"
 #include "ipv4.h"
 #include "ipv4-antnet-routing-table-entry.h"
+#include "ipv4-antnet-local-traffic-statistics-entry.h"
 
 #include "ns3/ipv4-address.h"
 #include "ns3/ptr.h"
@@ -61,11 +62,13 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
     private:
         void ScheduleForwardAnt();
         void SendForwardAnt(Ipv4Address dest);
-        Ptr<Ipv4Route> LookupRoute(Ipv4Address dest);
+        Ptr<Ipv4Route> LookupRoute(Ipv4Address dest, Ptr<NetDevice> oif = nullptr) const;
 
         typedef std::list<Ipv4AntNetRoutingTableEntry> RoutingTable;
+        typedef std::list<Ipv4AntNetLocalTrafficStatisticsEntry> LocalTrafficStatisticsTable;
 
-        RoutingTable m_table;
+        RoutingTable m_routingTable;
+        LocalTrafficStatisticsTable m_localTrafficStatsTable;
         Ptr<Ipv4> m_ipv4;
 };
 
