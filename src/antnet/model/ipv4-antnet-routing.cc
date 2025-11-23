@@ -185,14 +185,19 @@ void Ipv4AntNetRouting::ScheduleForwardAnt() {
 void Ipv4AntNetRouting::SendForwardAnt(Ipv4Address dest) {
     Ptr<Packet> p = Create<Packet>();
 
+    Ptr<Ipv4Route> route = LookupRoute(dest);
+    if (!route) {
+        NS_LOG_ERROR("No route to send forward ant to " << dest);
+        return;
+    }
+
     AntHeader antHeader;
-    Ipv4Address source = this->m_ipv4->GetAddress(1, 0).GetLocal(); // Assuming interface 1 and address 0 for now, will change later
-    
+    Ipv4Address source = route->GetSource();
     antHeader.AddHop(source, Simulator::Now()); // Initial hop with current node and current time
     antHeader.SetAntType(AntHeader::Type::FORWARD_ANT);
     p->AddHeader(antHeader);
 
-    m_ipv4->Send(p, source, dest, PROTOCOL_ANTNET, LookupRoute(dest));
+    m_ipv4->Send(p, source, dest, PROTOCOL_ANTNET, route);
 }
 
 Ptr<Ipv4Route> Ipv4AntNetRouting::LookupRoute(Ipv4Address dest, Ptr<NetDevice> oif) const {
