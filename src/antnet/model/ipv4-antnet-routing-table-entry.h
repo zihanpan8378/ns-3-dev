@@ -2,6 +2,7 @@
 #define IPV4_ANTNET_ROUTING_TABLE_ENTRY_H
 
 #include "ns3/ipv4-address.h"
+#include "ns3/net-device.h"
 
 #include <list>
 #include <ostream>
@@ -16,39 +17,70 @@ class Ipv4AntNetRoutingTableEntry
     // Similar to Ipv4RoutingTableEntry but has a list of pheromone values for different next hops
     // Check Ipv4RoutingTableEntry on how to implement basic functions
 
-    private:
-
+    public:
         typedef std::pair<Ipv4Address, uint32_t> PheromoneKey; // Destination address and interface index
         typedef std::list<std::pair<PheromoneKey, double>> PheromoneList;
 
-        Ipv4Address m_dest;
-        Ipv4Mask m_destNetworkMask;
-        PheromoneList m_pheromoneList;
-
-    public:
         /**
          * @brief This constructor does nothing
          */
         Ipv4AntNetRoutingTableEntry();
-
         /**
          * @brief Copy Constructor
          * @param route The route to copy
          */
         Ipv4AntNetRoutingTableEntry(const Ipv4AntNetRoutingTableEntry& route);
-        
         /**
          * @brief Copy Constructor
          * @param route The route to copy
          */
         Ipv4AntNetRoutingTableEntry(const Ipv4AntNetRoutingTableEntry* route);
+        /**
+         * @brief Constructor.
+         * @param network network address
+         * @param mask network mask
+         * @param pheromoneList list of possible next hops with pheromone values
+         */
+        Ipv4AntNetRoutingTableEntry(Ipv4Address dest, 
+                                    Ipv4Mask destNetworkMask, 
+                                    PheromoneList pheromoneList);
 
 
         /**
-         * @brief Get the next hop with the highest pheromone value
+         * @return The IPv4 address of the destination of this route
          */
-        PheromoneKey GetNextHop();
-    
+        Ipv4Address GetDestAddr() const;
+        /**
+         * @return The IPv4 network number of the destination of this route
+         */
+        Ipv4Mask GetDestMask() const;
+        /**
+         * @return The pheromone list of this route
+         */
+        PheromoneList GetPheromoneList() const;
+
+
+        /**
+         * @return True if this route is a gateway route; false otherwise
+         */
+        bool HasNextHop() const;
+        /**
+         * @brief Get the next hop with the highest pheromone value
+         * @param oif requested output interface if any (put nullptr otherwise)
+         */
+        PheromoneKey GetNextHop(Ptr<NetDevice> oif = nullptr) const;
+
+        /**
+         * @brief Update pheromone values for a next hop. The pheromone value for other
+         * PheromoneKeys are changed accordingly to keep the sum of pheromone values equal to 1.0
+         * @param nextHopAddress The address of the next hop the packet was sent to
+         */
+        void UpdatePheromone(Ipv4Address nextHopAddress) const;
+
+
+        /**
+         * @return True if this route is a host route (mask of all ones); false otherwise
+         */
         bool IsHost() const;
         /**
          * @return True if this route is not a host route (mask is not all ones); false otherwise
@@ -60,34 +92,54 @@ class Ipv4AntNetRoutingTableEntry
          * @return True if this route is a default route; false otherwise
          */
         bool IsDefault() const;
-        /**
-         * @return True if this route is a gateway route; false otherwise
-         */
-        bool HasGateway() const;
-        /**
-         * @return address of the gateway stored in this entry
-         */
-        Ipv4Address GetGateway() const;
-        /**
-         * @return The IPv4 address of the destination of this route
-         */
-        Ipv4Address GetDest() const;
-        /**
-         * @return The IPv4 network number of the destination of this route
-         */
-        Ipv4Address GetDestNetwork() const;
-        /**
-         * @return The IPv4 network mask of the destination of this route
-         */
-        Ipv4Mask GetDestNetworkMask() const;
-        /**
-         * @return The Ipv4 interface number used for sending outgoing packets
-         */
-        uint32_t GetInterface() const;
+        
 
-    
-    
+        /**
+         * @return An Ipv4AntNetRoutingTableEntry object corresponding to the input
+         * parameters.  This route is distinguished; it will match any
+         * destination for which a more specific route does not exist.
+         * This route will have a single next hop with the given parameters
+         * that has pheromone value of 1.0
+         * @param nextHop Ipv4Address of the next hop
+         * @param interface Outgoing interface
+         */
+        static Ipv4AntNetRoutingTableEntry CreateDefaultRoute(Ipv4Address nextHop, uint32_t interface);
+  
+        /**
+         * @return An Ipv4AntNetRoutingTableEntry object corresponding to the input parameters.
+         * A list of possible next hops is provided, will be assigned equal pheromone values initially
+         * @param network Ipv4Address of the destination network
+         * @param networkMask Ipv4Mask of the destination network mask
+         * @param nextHops List of possible next hops and interfaces
+         */
+        static Ipv4AntNetRoutingTableEntry CreateNetworkRouteTo(Ipv4Address network,
+                                                                Ipv4Mask networkMask,
+                                                                std::list<PheromoneKey> nextHops);
+
+    private:
+        Ipv4Address m_dest;
+        Ipv4Mask m_destNetworkMask;
+        PheromoneList m_pheromoneList;
 };
+
+/**
+ * @brief Stream insertion operator.
+ *
+ * @param os the reference to the output stream
+ * @param route the Ipv4 AntNet routing table entry
+ * @returns the reference to the output stream
+ */
+std::ostream& operator<<(std::ostream& os, const Ipv4AntNetRoutingTableEntry& route);
+
+/**
+ * @brief Equality operator.
+ *
+ * @param a lhs
+ * @param b rhs
+ * @returns true if operands are equal, false otherwise
+ */
+bool operator==(const Ipv4AntNetRoutingTableEntry a, const Ipv4AntNetRoutingTableEntry b);
+
 
 }
 
