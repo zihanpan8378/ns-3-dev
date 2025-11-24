@@ -76,6 +76,10 @@ Ipv4AntNetRoutingTableEntry::HasNextHop() const
 Ipv4AntNetRoutingTableEntry::PheromoneKey
 Ipv4AntNetRoutingTableEntry::GetNextHop(Ptr<NetDevice> oif) const
 {
+    // The current implementation does not follow exactly the AntNet algorithm
+    // Please check the original paper and correct this function
+
+
     NS_LOG_FUNCTION(this);
 
     // If no next hops available, return zero address and interface 0 (should not happen)
@@ -119,11 +123,16 @@ Ipv4AntNetRoutingTableEntry::GetNextHop(Ptr<NetDevice> oif) const
     return searchList.back().first;
 }
 
-void
-Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address nextHopAddress) const
+void 
+Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const
 {
-    NS_LOG_FUNCTION(this << nextHopAddress);
+    NS_LOG_FUNCTION(this << nextHop);
     // Placeholder for pheromone update logic
+
+
+
+
+
 }
 
 bool

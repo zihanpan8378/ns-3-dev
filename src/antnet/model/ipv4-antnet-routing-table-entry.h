@@ -16,7 +16,6 @@ class Ipv4AntNetRoutingTableEntry
 {
 
     // Similar to Ipv4RoutingTableEntry but has a list of pheromone values for different next hops
-    // Check Ipv4RoutingTableEntry on how to implement basic functions
 
     public:
         typedef std::pair<Ipv4Address, uint32_t> PheromoneKey; // Destination address and interface index

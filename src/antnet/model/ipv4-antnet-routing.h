@@ -51,6 +51,7 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
                         const LocalDeliverCallback& lcb,
                         const ErrorCallback& ecb) override;
 
+        // These functions are not implemented yet
         void NotifyInterfaceUp(uint32_t interface);
         void NotifyInterfaceDown(uint32_t interface);
         void NotifyAddAddress(uint32_t interface, Ipv4InterfaceAddress address);
@@ -61,7 +62,7 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
 
         /**
          * @brief Send a forward ant. The destination will be chosen based on local traffic statistics.
-         * This will be called periodically to send forward ants (don't know how to yet)
+         * This will be called periodically to send forward ants (don't know how to call this yet)
          */
         void ScheduleForwardAnt();
 
@@ -71,15 +72,31 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
          * @param dest The destination address
          */
         void SendForwardAnt(Ipv4Address dest) const;
+
         /**
-         * @brief Lookup a route in the routing table
+         * @brief Lookup a route in the routing table for the given destination and output interface (if any)
+         * Will find the route with the most matching prefix (highest mask length)
          * @param dest The destination address
          * @param oif The output interface (if any)
          * @return Pointer of the route if found, nullptr otherwise
          */
         Ptr<Ipv4Route> LookupRoute(Ipv4Address dest, Ptr<NetDevice> oif = nullptr) const;
 
+        /**
+         * @brief Find routing table entry for the given destination
+         * @param dest The destination address
+         * @return Pointer to the routing table entry if found, nullptr otherwise
+         */
+        Ptr<Ipv4AntNetRoutingTableEntry> FindRoutingTableEntry(Ipv4Address dest) const;
         
+        /**
+         * @brief Find traffic statistics table entry for the given destination
+         * @param dest The destination address
+         * @return Pointer to the traffic statistics entry if found, nullptr otherwise
+         */
+        Ptr<Ipv4AntNetLocalTrafficStatisticsEntry> FindLocalTrafficStatisticsEntry(Ipv4Address dest) const;
+
+
         typedef std::list<Ipv4AntNetRoutingTableEntry> RoutingTable;
         typedef std::list<Ipv4AntNetLocalTrafficStatisticsEntry> LocalTrafficStatisticsTable;
 
