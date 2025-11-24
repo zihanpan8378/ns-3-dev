@@ -3,6 +3,7 @@
 
 #include "ns3/ipv4-address.h"
 #include "ns3/net-device.h"
+#include "ipv4-antnet-local-traffic-statistics-entry.h"
 
 #include <list>
 #include <ostream>
@@ -69,14 +70,14 @@ class Ipv4AntNetRoutingTableEntry
          * @param oif requested output interface if any (put nullptr otherwise)
          */
         PheromoneKey GetNextHop(Ptr<NetDevice> oif = nullptr) const;
-
         /**
-         * @brief Update pheromone values for a next hop. The pheromone value for other
-         * PheromoneKeys are changed accordingly to keep the sum of pheromone values equal to 1.0
-         * @param nextHopAddress The address of the next hop the packet was sent to
+         * @brief Update pheromone values for the given destination and nextHop address.
+         * @param dest The destination address
+         * @param nextHop The address of the next hop the packet was sent to
+         * @param trafficStat The local traffic statistics entry for this destination
          */
-        void UpdatePheromone(Ipv4Address nextHopAddress) const;
-
+        void UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const;
+        
 
         /**
          * @return True if this route is a host route (mask of all ones); false otherwise
@@ -92,7 +93,7 @@ class Ipv4AntNetRoutingTableEntry
          * @return True if this route is a default route; false otherwise
          */
         bool IsDefault() const;
-        
+
 
         /**
          * @return An Ipv4AntNetRoutingTableEntry object corresponding to the input

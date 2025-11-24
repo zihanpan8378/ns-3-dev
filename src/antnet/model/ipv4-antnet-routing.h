@@ -59,11 +59,27 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         void PrintRoutingTable(Ptr<OutputStreamWrapper> stream,
                                Time::Unit unit = Time::S) const override;
 
-    private:
+        /**
+         * @brief Send a forward ant. The destination will be chosen based on local traffic statistics.
+         * This will be called periodically to send forward ants (don't know how to yet)
+         */
         void ScheduleForwardAnt();
-        void SendForwardAnt(Ipv4Address dest);
+
+    private:
+        /**
+         * @brief Send a forward ant to the specified destination
+         * @param dest The destination address
+         */
+        void SendForwardAnt(Ipv4Address dest) const;
+        /**
+         * @brief Lookup a route in the routing table
+         * @param dest The destination address
+         * @param oif The output interface (if any)
+         * @return Pointer of the route if found, nullptr otherwise
+         */
         Ptr<Ipv4Route> LookupRoute(Ipv4Address dest, Ptr<NetDevice> oif = nullptr) const;
 
+        
         typedef std::list<Ipv4AntNetRoutingTableEntry> RoutingTable;
         typedef std::list<Ipv4AntNetLocalTrafficStatisticsEntry> LocalTrafficStatisticsTable;
 

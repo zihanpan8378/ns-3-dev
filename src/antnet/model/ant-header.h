@@ -20,11 +20,23 @@ class AntHeader : public Header
             BACKWARD_ANT = 1
         };
 
-    private:
-        typedef std::pair<Ipv4Address, Time> STACK_ENTRY;
+        class AntHeaderStackEntry
+        {
+            Ipv4Address address;
+            Time time;
 
+            public:
+                AntHeaderStackEntry(Ipv4Address addr, Time t)
+                    : address(addr), time(t) {}
+
+                Ipv4Address GetAddress() const { return address; }
+                Time GetTime() const { return time; }
+        };
+
+    private:
         Type m_type;
-        std::vector<STACK_ENTRY> m_stack;
+        std::vector<AntHeaderStackEntry> m_forwardStack;
+        std::vector<AntHeaderStackEntry> m_backwardStack;
         
 
     public:
@@ -40,15 +52,26 @@ class AntHeader : public Header
 
         virtual void Print(std::ostream& os) const override;
 
-        void AddHop(Ipv4Address hopAddress, Time delay);
+        /**
+         * @brief Add a hop to the stack when relaying a forward ant
+         * @param hopAddress The address of the hop to add
+         * @param time The time when reached this hop
+         */
+        void AddForwardHop(Ipv4Address hopAddress, Time time);
 
-        STACK_ENTRY PopHop();
+        /**
+         * @brief Pop the top hop from the forward stack, and add it to the backward stack
+         * @return The top hop entry
+         */
+        AntHeaderStackEntry PopForwardStackEntryToBackwardStack();
 
         void SetAntType(Type type);
 
         Type GetAntType() const;
 
-        const std::vector<STACK_ENTRY>& GetStack() const;
+        const std::vector<AntHeaderStackEntry>& GetForwardStack() const;
+
+        const std::vector<AntHeaderStackEntry>& GetBackwardStack() const;
 };
 
 } // namespace ns3
