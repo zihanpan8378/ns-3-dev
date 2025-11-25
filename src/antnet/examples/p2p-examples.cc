@@ -2,6 +2,7 @@
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
 #include "ns3/network-module.h"
+#include "../model/ipv4-antnet-routing-table-entry.h"
 
 using namespace ns3;
 
@@ -22,7 +23,6 @@ int main()
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
-    // ====== 读路由表 ======
     for (uint32_t i = 0; i < nodes.GetN(); i++)
     {
         Ptr<Ipv4> ipv4 = nodes.Get(i)->GetObject<Ipv4>();
@@ -35,13 +35,18 @@ int main()
         for (uint32_t k = 0; k < n; k++)
         {
             Ipv4RoutingTableEntry rte = gr->GetRoute(k);
+            Ipv4Address nextHop  = rte.GetGateway();
+            uint32_t    iface    = rte.GetInterface();
+            // 1. Make the key
+            Ipv4AntNetRoutingTableEntry::PheromoneKey key(nextHop, iface);
 
-            std::cout << rte.GetDest() << "  "
-                      << rte.GetGateway() << "  "
-                      << rte.GetDestNetwork() << "/"
-                      << rte.GetDestNetworkMask() 
-                      << "  OutIf=" << rte.GetInterface()
-                      << std::endl;
+            // 2. Pick an initial pheromone value
+            double initialPheromone = 1.0;
+
+            // 3. Make the pheromone list
+            Ipv4AntNetRoutingTableEntry::PheromoneList pherList;
+            pherList.push_back(std::make_pair(key, initialPheromone));
+            Ipv4AntNetRoutingTableEntry newRoutingTable = new Ipv4AntNetRoutingTableEntry(rte.GetDest(), rte.GetDestNetworkMask(), pherList);
         }
     }
 
