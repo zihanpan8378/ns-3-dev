@@ -123,17 +123,17 @@ Ipv4AntNetRoutingTableEntry::GetNextHop(Ptr<NetDevice> oif) const
     return searchList.back().first;
 }
 
-void 
-Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const
-{
-    NS_LOG_FUNCTION(this << nextHop);
-    // Placeholder for pheromone update logic
+// void 
+// Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const
+// {
+//     NS_LOG_FUNCTION(this << nextHop);
+//     // Placeholder for pheromone update logic
 
 
 
 
 
-}
+// }
 
 bool
 Ipv4AntNetRoutingTableEntry::IsNetwork() const
