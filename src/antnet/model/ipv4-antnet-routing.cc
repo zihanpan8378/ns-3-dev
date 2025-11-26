@@ -1,5 +1,4 @@
 #include "ipv4-antnet-routing.h"
-#include "ipv4-route.h"
 #include "ant-header.h"
 
 #include "ns3/boolean.h"
@@ -12,6 +11,7 @@
 #include "ns3/simulator.h"
 #include "ns3/nstime.h"
 #include "ns3/timestamp-tag.h"
+#include "ns3/ipv4-route.h"
 
 #include <iomanip>
 #include <vector>
@@ -44,6 +44,102 @@ Ipv4AntNetRouting::~Ipv4AntNetRouting()
 {
     NS_LOG_FUNCTION(this);
 }
+
+void 
+Ipv4AntNetRouting::NotifyInterfaceUp(uint32_t interface) {
+    NS_LOG_FUNCTION(this << interface);
+    // for (uint32_t j = 0; j < m_ipv4->GetNAddresses(interface); ++j) {
+    //     Ipv4Address addr = m_ipv4->GetAddress(interface, j).GetLocal();
+    //     Ipv4Mask mask = m_ipv4->GetAddress(interface, j).GetMask();
+
+    //     if (addr != Ipv4Address() && mask != Ipv4Mask() && mask != Ipv4Mask::GetOnes()) {
+    //         Ipv4AntNetRoutingTableEntry* routeEntry = FindRoutingTableEntry(addr);
+    //         if (routeEntry) {
+    //             NS_LOG_LOGIC("Interface " << interface << " address " << addr << " already in routing table");
+    //             continue;
+    //         } else {
+    //             NS_LOG_LOGIC("Adding interface " << interface << " address " << addr << " to routing table");
+    //             Ipv4AntNetRoutingTableEntry newEntry(
+    //                 addr.CombineMask(mask),
+    //                 mask,
+    //                 Ipv4AntNetRoutingTableEntry::PheromoneList()
+    //             );
+    //             m_routingTable.push_back(newEntry);
+    //         }
+    //     }
+
+    //     NS_LOG_LOGIC("Interface " << interface << " is up with address " << addr);
+    // }
+}
+
+void 
+Ipv4AntNetRouting::NotifyInterfaceDown(uint32_t interface) {
+    NS_LOG_FUNCTION(this << interface);
+    
+
+
+
+}
+
+void 
+Ipv4AntNetRouting::NotifyAddAddress(uint32_t interface, Ipv4InterfaceAddress address) {
+    NS_LOG_FUNCTION(this << interface << " " << address.GetLocal());
+
+
+
+
+}
+
+void
+Ipv4AntNetRouting::NotifyRemoveAddress(uint32_t interface, Ipv4InterfaceAddress address) {
+    NS_LOG_FUNCTION(this << interface << " " << address.GetLocal());
+
+
+
+
+}
+
+void
+Ipv4AntNetRouting::SetIpv4(Ptr<Ipv4> ipv4)
+{
+    NS_LOG_FUNCTION(this << ipv4);
+    NS_ASSERT(!m_ipv4 && ipv4);
+    m_ipv4 = ipv4;
+    for (uint32_t i = 0; i < m_ipv4->GetNInterfaces(); i++)
+    {
+        if (m_ipv4->IsUp(i))
+        {
+            NotifyInterfaceUp(i);
+        }
+        else
+        {
+            NotifyInterfaceDown(i);
+        }
+    }
+}
+
+void
+Ipv4AntNetRouting::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit unit) const
+{
+    NS_LOG_FUNCTION(this << stream);
+
+    *stream->GetStream() << "AntNet Routing Table and Local Traffic Stat for Node " << m_ipv4->GetObject<Node>()->GetId() << std::endl;
+    *stream->GetStream() << "    Routing Table Entries:" << std::endl;
+    *stream->GetStream() << "        --------------------------------------------------------" << std::endl;
+    for (const auto& entry : m_routingTable) {
+        *stream->GetStream() << "        " << entry.ToString();
+    }
+    *stream->GetStream() << "        --------------------------------------------------------" << std::endl;
+
+    *stream->GetStream() << "    Local Traffic Statistics Entries:" << std::endl;
+    *stream->GetStream() << "        --------------------------------------------------------" << std::endl;
+    for (const auto& entry : m_localTrafficStatsTable) {
+        *stream->GetStream() << "        " << entry.ToString();
+    }
+    *stream->GetStream() << "        --------------------------------------------------------" << std::endl;
+    *stream->GetStream() << std::endl;
+}
+
 
 Ptr<Ipv4Route>
 Ipv4AntNetRouting::RouteOutput(Ptr<Packet> p,
@@ -162,7 +258,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             Time delay = antDestinationTime - backwardStack.back().GetTime();
             
             // Update statistics for destination
-            Ptr<Ipv4AntNetLocalTrafficStatisticsEntry> trafficEntry = FindLocalTrafficStatisticsEntry(antDestinationAddr);
+            Ipv4AntNetLocalTrafficStatisticsEntry* trafficEntry = FindLocalTrafficStatisticsEntry(antDestinationAddr);
             if (trafficEntry) {
                 // Call the traffic stat entry's update method
                 trafficEntry->UpdateStatistics(delay);
@@ -173,11 +269,11 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             }
             
             // Update routing table pheromones for destination
-            Ipv4Address nextHopAddr = backwardStack[backwardStack.size() - 2].GetAddress();
-            Ptr<Ipv4AntNetRoutingTableEntry> routeEntry = FindRoutingTableEntry(antDestinationAddr);
+            Ipv4Address nextForwardHopAddr = backwardStack[backwardStack.size() - 2].GetAddress();
+            Ipv4AntNetRoutingTableEntry* routeEntry = FindRoutingTableEntry(antDestinationAddr);
             if (routeEntry) {
                 // Call the routing table entry's pheromone update method
-                routeEntry->UpdatePheromone(antDestinationAddr, nextHopAddr, *trafficEntry);
+                routeEntry->UpdatePheromone(antDestinationAddr, nextForwardHopAddr, *trafficEntry);
                 NS_LOG_LOGIC("Updated routing table pheromones for destination " << antDestinationAddr);
                 return true;
             } else {
@@ -193,12 +289,12 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             //         Ipv4Address subpathDest = backwardStack[idx].GetAddress();
             //         Time subpathDelay = backwardStack[idx].GetTime() - backwardStack.back().GetTime();
             //         double delayMs = (subpathDelay).GetMilliSeconds();
-            //         Ptr<Ipv4AntNetLocalTrafficStatisticsEntry> subPathTrafficEntry = FindLocalTrafficStatisticsEntry(subpathDest);
+            //         Ipv4AntNetLocalTrafficStatisticsEntry* subPathTrafficEntry = FindLocalTrafficStatisticsEntry(subpathDest);
             //         if (subPathTrafficEntry) {
             //             if (delayMs <= subPathTrafficEntry->GetUpperBoundDelayFromWindow()) {
             //                 NS_LOG_LOGIC("Subpath to " << subpathDest << " is good enough with delay " << delayMs << " ms, updating pheromone");
             //                 Ipv4Address subpathNextHopAddr = backwardStack[idx - 1].GetAddress();
-            //                 Ptr<Ipv4AntNetRoutingTableEntry> subpathRouteEntry = FindRoutingTableEntry(subpathDest);
+            //                 Ipv4AntNetRoutingTableEntry* subpathRouteEntry = FindRoutingTableEntry(subpathDest);
             //                 if (subpathRouteEntry) {
             //                     subpathRouteEntry->UpdatePheromone(subpathDest, subpathNextHopAddr, *subPathTrafficEntry);
             //                     NS_LOG_LOGIC("Updated routing table pheromones for subpath destination " << subpathDest);
@@ -222,10 +318,10 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
 
             // Relay backward ant to next hop
             AntHeader::AntHeaderStackEntry nextHop = antHeader.PopForwardStackEntryToBackwardStack();
-            Ipv4Address nextHopAddr = nextHop.GetAddress();
+            Ipv4Address nextBackwardHopAddr = nextHop.GetAddress();
             // Since backward ants are sent throught the original path
             // we lookup route to next hop (previous hop when forward) rather than the destination (source node when forward)
-            Ptr<Ipv4Route> route = LookupRoute(nextHopAddr);
+            Ptr<Ipv4Route> route = LookupRoute(nextBackwardHopAddr);
             if (route) {
                 // Backward ants get high priority than forward ants and normal packets
                 SocketPriorityTag priorityTag;
@@ -236,7 +332,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                 ucb(route, copy, header);
                 return true;
             } else {
-                NS_LOG_ERROR("No route found for backward ant to " << nextHopAddr);
+                NS_LOG_ERROR("No route found for backward ant to " << nextBackwardHopAddr);
                 return false;
             }
         } else {
@@ -268,7 +364,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
     }
 
     // Add data flow measure for the destination in the local traffic statistics table
-    Ptr<Ipv4AntNetLocalTrafficStatisticsEntry> entry = FindLocalTrafficStatisticsEntry(header.GetDestination());
+    Ipv4AntNetLocalTrafficStatisticsEntry* entry = FindLocalTrafficStatisticsEntry(header.GetDestination());
     if (entry) {
         entry->AddDataFlowMeasure();
     } else {
@@ -305,6 +401,64 @@ void Ipv4AntNetRouting::ScheduleForwardAnt() {
             SendForwardAnt(dest);
             break;
         }
+    }
+}
+
+void Ipv4AntNetRouting::InitializeRoutingTable(
+    const std::list<std::pair<Ipv4Address, Ipv4Address>>& destList, 
+    const std::list<std::pair<Ipv4Address, Ipv4Address>>& neighbourList) {
+    NS_LOG_FUNCTION(this);
+
+    // Clear existing routing table and local traffic statistics table
+    m_routingTable.clear();
+    m_localTrafficStatsTable.clear();
+
+    // Initial pheromone value, equally distributed among neighbours
+    double initialPheromone = 1.0 / neighbourList.size();
+
+    // Initialize routing table entries
+    for (const auto& destAddrAndMask : destList) {
+        Ipv4Address destAddr = destAddrAndMask.first;
+        Ipv4Mask destMask = Ipv4Mask(destAddrAndMask.second.Get());
+
+        // Prepare local traffic statistics entry for this destination
+        Ipv4AntNetLocalTrafficStatisticsEntry trafficEntry(destAddr, destMask);
+        m_localTrafficStatsTable.push_back(trafficEntry);
+
+        // Prepare pheromone list for this node
+        Ipv4AntNetRoutingTableEntry::PheromoneList pheromoneList;
+        for (const auto& neighbourAddrAndMask : neighbourList) {
+            Ipv4Address neighbourAddr = neighbourAddrAndMask.first;
+            Ipv4Mask neighbourMask = Ipv4Mask(neighbourAddrAndMask.second.Get());
+
+            // Get the interface that can reach this neighbour
+            // Iterate through interfaces to find the matching one
+            uint32_t interfaceToNeighbour = 0;
+            for (uint32_t i = 0; i < m_ipv4->GetNInterfaces(); ++i) {
+                Ptr<NetDevice> device = m_ipv4->GetNetDevice(i);
+                if (device && device->IsPointToPoint()) {
+                    bool foundInterface = false;
+                    // Check if this interface's address matches the neighbour's subnet
+                    for (uint32_t j = 0; j < m_ipv4->GetNAddresses(i); ++j) {
+                        Ipv4Address ifaceAddr = m_ipv4->GetAddress(i, j).GetLocal();
+                        if (neighbourMask.IsMatch(ifaceAddr, neighbourAddr)) {
+                            interfaceToNeighbour = i;
+                            foundInterface = true;
+                            break;
+                        }
+                    }
+                    if (foundInterface) {
+                        break;
+                    }
+                }
+            }
+            // Add this neighbour to the pheromone list with initial pheromone value
+            Ipv4AntNetRoutingTableEntry::PheromoneKey pheromoneKey = std::make_pair(neighbourAddr, interfaceToNeighbour);
+            pheromoneList.push_back(std::make_pair(pheromoneKey, initialPheromone));
+        }
+        // Create routing table entry and add to routing table
+        Ipv4AntNetRoutingTableEntry newEntry(destAddr, destMask, pheromoneList);
+        m_routingTable.push_back(newEntry);
     }
 }
 
@@ -403,27 +557,26 @@ Ptr<Ipv4Route> Ipv4AntNetRouting::LookupRoute(Ipv4Address dest, Ptr<NetDevice> o
     return rtentry;
 }
 
-Ptr<Ipv4AntNetRoutingTableEntry> Ipv4AntNetRouting::FindRoutingTableEntry(Ipv4Address dest) const {
-    Ptr<Ipv4AntNetRoutingTableEntry> entry = nullptr;
+Ipv4AntNetRoutingTableEntry*
+Ipv4AntNetRouting::FindRoutingTableEntry(Ipv4Address dest)
+{
     for (auto i = m_routingTable.begin(); i != m_routingTable.end(); ++i) {
-        entry = const_cast<Ipv4AntNetRoutingTableEntry*>(&(*i));
-        if (entry->GetDestAddr() == dest) {
-            break;
+        if (i->GetDestAddr() == dest) {
+            return &(*i);
         }
     }
-    return entry;
+    return nullptr;
 }
 
-Ptr<Ipv4AntNetLocalTrafficStatisticsEntry> Ipv4AntNetRouting::FindLocalTrafficStatisticsEntry(Ipv4Address dest) const {
-    Ptr<Ipv4AntNetLocalTrafficStatisticsEntry> entry = nullptr;
+Ipv4AntNetLocalTrafficStatisticsEntry*
+Ipv4AntNetRouting::FindLocalTrafficStatisticsEntry(Ipv4Address dest)
+{
     for (auto i = m_localTrafficStatsTable.begin(); i != m_localTrafficStatsTable.end(); ++i) {
-        entry = const_cast<Ipv4AntNetLocalTrafficStatisticsEntry*>(&(*i));
-        if (entry->GetDestAddr() == dest) {
-            break;
+        if (i->GetDestAddr() == dest) {
+            return &(*i);
         }
     }
-    return entry;
+    return nullptr;
 }
 
 }
-

@@ -3,7 +3,7 @@
 
 #include "ns3/ipv4-address.h"
 #include "ns3/net-device.h"
-// #include "ipv4-antnet-local-traffic-statistics-entry.h"
+#include "ipv4-antnet-local-traffic-statistics-entry.h"
 
 #include <list>
 #include <ostream>
@@ -47,6 +47,12 @@ class Ipv4AntNetRoutingTableEntry
 
 
         /**
+         * @return String representation of this route
+         */
+        std::string ToString() const;
+
+        
+        /**
          * @return The IPv4 address of the destination of this route
          */
         Ipv4Address GetDestAddr() const;
@@ -75,7 +81,7 @@ class Ipv4AntNetRoutingTableEntry
          * @param nextHop The address of the next hop the packet was sent to
          * @param trafficStat The local traffic statistics entry for this destination
          */
-        // void UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const;
+        void UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const;
         
 
         /**

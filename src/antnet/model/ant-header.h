@@ -9,8 +9,6 @@
 namespace ns3
 {
 
-
-
 class AntHeader : public Header
 {
     public:

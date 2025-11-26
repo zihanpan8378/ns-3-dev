@@ -3,6 +3,7 @@
 
 #include "ns3/ipv4-address.h"
 #include "ns3/net-device.h"
+#include "ns3/nstime.h"
 
 #include <list>
 #include <ostream>
@@ -22,14 +23,16 @@ class Ipv4AntNetLocalTrafficStatisticsEntry
         double m_delayVariance; // Variance of delay to destination
         std::list<double> m_delayWindow; // Sliding window of delays
 
-        static const double MU = 0.005;
-        static const double C = 0.3;
-        static const double MAX_WINDOW_SIZE = 5 * (C / MU);
+        static constexpr double MU = 0.005;
+        static constexpr double C = 0.3;
+        static constexpr double MAX_WINDOW_SIZE = 5 * (C / MU);
 
     public:
-        // The constructor and destructor are not implemented yet
         Ipv4AntNetLocalTrafficStatisticsEntry();
-        ~Ipv4AntNetLocalTrafficStatisticsEntry();
+
+        Ipv4AntNetLocalTrafficStatisticsEntry(Ipv4Address dest, Ipv4Mask destNetworkMask);
+
+        std::string ToString() const;
 
 
         /**

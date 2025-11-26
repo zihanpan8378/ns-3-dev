@@ -10,6 +10,28 @@ namespace ns3
 {
 NS_LOG_COMPONENT_DEFINE("Ipv4AntNetLocalTrafficStatisticsEntry");
 
+Ipv4AntNetLocalTrafficStatisticsEntry::Ipv4AntNetLocalTrafficStatisticsEntry(Ipv4Address dest, Ipv4Mask destNetworkMask) 
+    : m_dest(dest),
+      m_destNetworkMask(destNetworkMask),
+      m_dataFlowMeasure(0.0),
+      m_meanDelay(0.0),
+      m_delayVariance(0.0),
+      m_delayWindow({})
+{
+}
+
+std::string 
+Ipv4AntNetLocalTrafficStatisticsEntry::ToString() const
+{
+    std::ostringstream oss;
+    oss << "destination=" << m_dest << "/" << m_destNetworkMask.GetPrefixLength() << ", "
+        << "data flow measure=" << m_dataFlowMeasure << ", "
+        << "mean delay=" << m_meanDelay << "ms, "
+        << "delay variance=" << m_delayVariance << "ms^2"
+        << std::endl;
+    return oss.str();
+}
+
 void Ipv4AntNetLocalTrafficStatisticsEntry::UpdateStatistics(Time delay) {
     double delayMs = delay.GetMilliSeconds();
     // Update mean delay using exponential moving average

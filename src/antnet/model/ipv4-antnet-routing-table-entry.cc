@@ -40,6 +40,18 @@ Ipv4AntNetRoutingTableEntry::Ipv4AntNetRoutingTableEntry(Ipv4Address dest,
     NS_LOG_FUNCTION(this << dest << destNetworkMask);
 }
 
+std::string 
+Ipv4AntNetRoutingTableEntry::ToString() const
+{
+    std::ostringstream oss;
+
+    oss << "destination address=" << GetDestAddr() << "/" << GetDestMask().GetPrefixLength() << ":\n";
+    for (const auto& entry : GetPheromoneList()) {
+        oss << "            next hop=" << entry.first.first << ", interface=" << entry.first.second << ", pheromone=" << entry.second << std::endl;
+    }
+    return oss.str();
+}
+
 Ipv4Address
 Ipv4AntNetRoutingTableEntry::GetDestAddr() const
 {
@@ -123,17 +135,17 @@ Ipv4AntNetRoutingTableEntry::GetNextHop(Ptr<NetDevice> oif) const
     return searchList.back().first;
 }
 
-// void 
-// Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const
-// {
-//     NS_LOG_FUNCTION(this << nextHop);
-//     // Placeholder for pheromone update logic
+void 
+Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const
+{
+    NS_LOG_FUNCTION(this << nextHop);
+    // Placeholder for pheromone update logic
 
 
 
 
 
-// }
+}
 
 bool
 Ipv4AntNetRoutingTableEntry::IsNetwork() const

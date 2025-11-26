@@ -1,14 +1,14 @@
 #ifndef IPV4_ANTNET_ROUTING_H
 #define IPV4_ANTNET_ROUTING_H
 
-#include "ipv4-header.h"
-#include "ipv4-routing-protocol.h"
-#include "ipv4.h"
 #include "ipv4-antnet-routing-table-entry.h"
 #include "ipv4-antnet-local-traffic-statistics-entry.h"
 
 #include "ns3/ipv4-address.h"
 #include "ns3/ptr.h"
+#include "ns3/ipv4-header.h"
+#include "ns3/ipv4-routing-protocol.h"
+#include "ns3/ipv4.h"
 
 #include <list>
 #include <stdint.h>
@@ -66,6 +66,17 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
          */
         void ScheduleForwardAnt();
 
+        /**
+         * @brief Initialize the routing table with the given list of possible destinations and their neighbours
+         * Initial pheromone values will be set equally for all neighbours
+         * @param destList List of all possible destination addresses and masks in the network
+         * @param neighbourList List of neighbour addresses and masks for this node
+         */
+        void InitializeRoutingTable(
+            const std::list<std::pair<Ipv4Address, Ipv4Address>>& destList, 
+            const std::list<std::pair<Ipv4Address, Ipv4Address>>& neighbourList
+        );
+
     private:
         /**
          * @brief Send a forward ant to the specified destination
@@ -87,14 +98,14 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
          * @param dest The destination address
          * @return Pointer to the routing table entry if found, nullptr otherwise
          */
-        Ptr<Ipv4AntNetRoutingTableEntry> FindRoutingTableEntry(Ipv4Address dest) const;
+        Ipv4AntNetRoutingTableEntry* FindRoutingTableEntry(Ipv4Address dest);
         
         /**
          * @brief Find traffic statistics table entry for the given destination
          * @param dest The destination address
          * @return Pointer to the traffic statistics entry if found, nullptr otherwise
          */
-        Ptr<Ipv4AntNetLocalTrafficStatisticsEntry> FindLocalTrafficStatisticsEntry(Ipv4Address dest) const;
+        Ipv4AntNetLocalTrafficStatisticsEntry* FindLocalTrafficStatisticsEntry(Ipv4Address dest);
 
 
         typedef std::list<Ipv4AntNetRoutingTableEntry> RoutingTable;
