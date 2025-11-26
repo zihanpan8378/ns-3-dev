@@ -57,7 +57,8 @@ class Ipv4AntNetRoutingTableEntry
         /**
          * @return The pheromone list of this route
          */
-        PheromoneList GetPheromoneList() const;
+        PheromoneList& GetPheromoneList() { return m_pheromoneList; }
+        const PheromoneList& GetPheromoneList() const { return m_pheromoneList; }
 
 
         /**

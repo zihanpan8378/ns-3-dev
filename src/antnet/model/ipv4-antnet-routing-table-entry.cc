@@ -54,12 +54,12 @@ Ipv4AntNetRoutingTableEntry::GetDestMask() const
     return m_destNetworkMask;
 }
 
-Ipv4AntNetRoutingTableEntry::PheromoneList
-Ipv4AntNetRoutingTableEntry::GetPheromoneList() const
-{
-    NS_LOG_FUNCTION(this);
-    return m_pheromoneList;
-}
+// Ipv4AntNetRoutingTableEntry::PheromoneList
+// Ipv4AntNetRoutingTableEntry::GetPheromoneList() const
+// {
+//     NS_LOG_FUNCTION(this);
+//     return m_pheromoneList;
+// }
 
 bool
 Ipv4AntNetRoutingTableEntry::HasNextHop() const
@@ -73,55 +73,109 @@ Ipv4AntNetRoutingTableEntry::HasNextHop() const
     return false;
 }
 
+// Ipv4AntNetRoutingTableEntry::PheromoneKey
+// Ipv4AntNetRoutingTableEntry::GetNextHop(Ptr<NetDevice> oif) const
+// {
+//     // The current implementation does not follow exactly the AntNet algorithm
+//     // Please check the original paper and correct this function
+
+
+//     NS_LOG_FUNCTION(this);
+
+//     // If no next hops available, return zero address and interface 0 (should not happen)
+//     if (m_pheromoneList.empty()) {
+//         return Ipv4AntNetRoutingTableEntry::PheromoneKey(Ipv4Address::GetZero(), 0);
+//     }
+
+//     PheromoneList searchList = m_pheromoneList;
+//     if (oif) {
+//         // Filter pheromone list by output interface
+//         PheromoneList filteredList = {};
+//         for (const auto& entry : m_pheromoneList) {
+//             if (entry.first.second == oif->GetIfIndex()) {
+//                 filteredList.push_back(entry);
+//             }
+//         }
+//         // If no entries found for the requested interface, use all entries
+//         if (filteredList.empty()) {
+//             NS_LOG_WARN("No next hops found for the requested output interface. Using all next hops.");
+//         } else {
+//             searchList = filteredList;
+//         }
+//     }
+    
+//     // Calculate total probability
+//     double totalProb = 0.0;
+//     for (const auto& entry : searchList) {
+//         totalProb += entry.second;
+//     }
+//     // Generate random number between 0 and totalProb
+//     double randomValue = static_cast<double>(rand()) / RAND_MAX * totalProb;
+//     // Select based on cumulative probability
+//     double cumulativeProb = 0.0;
+//     for (const auto& entry : searchList) {
+//         cumulativeProb += entry.second;
+//         if (randomValue <= cumulativeProb) {
+//             return entry.first;
+//         }
+//     }
+//     // Return the last entry if none selected (should not happen)
+//     return searchList.back().first;
+// }
 Ipv4AntNetRoutingTableEntry::PheromoneKey
 Ipv4AntNetRoutingTableEntry::GetNextHop(Ptr<NetDevice> oif) const
 {
-    // The current implementation does not follow exactly the AntNet algorithm
-    // Please check the original paper and correct this function
+    NS_LOG_FUNCTION(this << oif);
 
-
-    NS_LOG_FUNCTION(this);
-
-    // If no next hops available, return zero address and interface 0 (should not happen)
     if (m_pheromoneList.empty()) {
-        return Ipv4AntNetRoutingTableEntry::PheromoneKey(Ipv4Address::GetZero(), 0);
+        return PheromoneKey(Ipv4Address::GetZero(), 0);
     }
 
-    PheromoneList searchList = m_pheromoneList;
-    if (oif) {
-        // Filter pheromone list by output interface
-        PheromoneList filteredList = {};
-        for (const auto& entry : m_pheromoneList) {
-            if (entry.first.second == oif->GetIfIndex()) {
-                filteredList.push_back(entry);
-            }
-        }
-        // If no entries found for the requested interface, use all entries
-        if (filteredList.empty()) {
-            NS_LOG_WARN("No next hops found for the requested output interface. Using all next hops.");
-        } else {
-            searchList = filteredList;
+    // oif が指定されていれば、それに対応する候補だけに絞る
+    PheromoneList candidates;
+    for (const auto& entry : m_pheromoneList) {
+        if (!oif || entry.first.second == oif->GetIfIndex()) {
+            candidates.push_back(entry);
         }
     }
-    
-    // Calculate total probability
-    double totalProb = 0.0;
-    for (const auto& entry : searchList) {
-        totalProb += entry.second;
+    if (candidates.empty()) {
+        candidates = m_pheromoneList;
+        NS_LOG_WARN("No next hops match output interface. Using all next hops.");
     }
-    // Generate random number between 0 and totalProb
-    double randomValue = static_cast<double>(rand()) / RAND_MAX * totalProb;
-    // Select based on cumulative probability
-    double cumulativeProb = 0.0;
-    for (const auto& entry : searchList) {
-        cumulativeProb += entry.second;
-        if (randomValue <= cumulativeProb) {
-            return entry.first;
+
+    // キュー長に基づくヒューリスティック
+    std::vector<double> queueLengths(candidates.size(), 0.0);
+    double totalQueue = 0.0;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        Ptr<NetDevice> dev = oif ? oif : nullptr; // oif は nullptr の場合、queue 長は 0 にする
+        double qlen = 0.0;
+        // ここで Queue を取得できる場合は qlen を設定
+        queueLengths[i] = qlen;
+        totalQueue += qlen;
+    }
+
+    double alpha = 0.3;
+    double denom = 1.0 + alpha * (candidates.size() - 1);
+
+    std::vector<double> probabilities(candidates.size(), 0.0);
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        double ln = totalQueue > 0 ? 1.0 - queueLengths[i] / totalQueue : 1.0;
+        probabilities[i] = (candidates[i].second + alpha * ln) / denom;
+    }
+
+    // 乱数で選択
+    double r = static_cast<double>(rand()) / RAND_MAX;
+    double cumulative = 0.0;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        cumulative += probabilities[i];
+        if (r <= cumulative) {
+            return candidates[i].first;
         }
     }
-    // Return the last entry if none selected (should not happen)
-    return searchList.back().first;
+
+    return candidates.back().first;
 }
+
 
 // void 
 // Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const

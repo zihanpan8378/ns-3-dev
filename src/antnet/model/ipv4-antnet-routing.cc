@@ -414,6 +414,61 @@ Ptr<Ipv4AntNetRoutingTableEntry> Ipv4AntNetRouting::FindRoutingTableEntry(Ipv4Ad
     return entry;
 }
 
+void Ipv4AntNetRouting::UpdatePheromone(
+    Ipv4AntNetRoutingTableEntry& entry, 
+    Ipv4AntNetRoutingTableEntry::PheromoneKey nextHopKey,
+    double reward)
+
+    auto& pheromone = entry.GetPheromoneList();  // map<Ipv4Address, double>
+
+    for (auto& kv : entry.GetPheromoneList()) {
+        if (kv.first == nextHopKey)     // positive reinforcement
+            kv.second += reward * (1 - kv.second);
+        else                            // negative reinforcement
+            kv.second -= reward * kv.second;
+    }
+}
+
+
+double Ipv4AntNetRouting::CalculateReward(
+    Ptr<Ipv4AntNetLocalTrafficStatisticsEntry> trafficStat,
+    Time delay,
+    uint32_t numNeighbors) // このノードの隣接ノード数
+{
+    double T = delay.GetMilliSeconds();
+    double Wbest = trafficStat->GetBestDelayFromWindow();
+    double mean = trafficStat->GetMeanDelay();
+    double var  = trafficStat->GetDelayVariance();
+    double stddev = std::sqrt(var);
+
+    uint32_t Wsize = trafficStat->GetWindowSize();
+    if (Wsize == 0) Wsize = 1;  // avoid div 0
+
+    // AntNet parameters
+    constexpr double z  = 1.70;
+    constexpr double c1 = 0.7;
+    constexpr double c2 = 0.3;
+
+    double Iinf = Wbest;
+    double Isup = mean + z * (stddev / std::sqrt(Wsize));
+
+    //-----------------------------------------
+    // Compute raw reinforcement r
+    //-----------------------------------------
+    double term1 = (Wbest > 0.0) ? (Wbest / T) : 0.0;
+    double denom = (Isup - Iinf) + (T - Iinf);
+    double term2 = (denom > 1e-9) ? ((Isup - Iinf) / denom) : 0.0;
+    double r = c1 * term1 + c2 * term2;
+
+    //-----------------------------------------
+    // Apply squash function
+    //-----------------------------------------
+    double reward = SquashReward(r, numNeighbors);
+    return reward;
+}
+
+
+
 Ptr<Ipv4AntNetLocalTrafficStatisticsEntry> Ipv4AntNetRouting::FindLocalTrafficStatisticsEntry(Ipv4Address dest) const {
     Ptr<Ipv4AntNetLocalTrafficStatisticsEntry> entry = nullptr;
     for (auto i = m_localTrafficStatsTable.begin(); i != m_localTrafficStatsTable.end(); ++i) {

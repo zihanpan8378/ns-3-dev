@@ -2,82 +2,67 @@
 #define IPV4_ANTNET_LOCAL_TRAFFIC_STATISTICS_ENTRY_H
 
 #include "ns3/ipv4-address.h"
-#include "ns3/net-device.h"
+#include "ns3/ipv4-mask.h"
+#include "ns3/nstime.h"
 
 #include <list>
-#include <ostream>
 #include <vector>
+#include <ostream>
 
 namespace ns3
 {
 
 class Ipv4AntNetLocalTrafficStatisticsEntry
 {
-    private:
-        Ipv4Address m_dest;
-        Ipv4Mask m_destNetworkMask;
+  private:
+    Ipv4Address m_dest;
+    Ipv4Mask m_destNetworkMask;
 
-        double m_dataFlowMeasure; // Measure of data flow (currently use sample count)
-        double m_meanDelay; // Mean delay to destination
-        double m_delayVariance; // Variance of delay to destination
-        std::list<double> m_delayWindow; // Sliding window of delays
+    double m_dataFlowMeasure;     // Number of data packets for this destination
+    double m_meanDelay;           // Exponential moving average delay
+    double m_delayVariance;       // Variance of delay
+    std::list<double> m_delayWindow;
 
-        static const double MU = 0.005;
-        static const double C = 0.3;
-        static const double MAX_WINDOW_SIZE = 5 * (C / MU);
+    // Algorithm constants
+    static inline constexpr double ETA = 0.005;   // learning rate
+    static inline constexpr double Z   = 1.70;    // confidence coefficient
+    static inline constexpr double C   = 0.3;     // constant used for window size
+    static inline constexpr double MU  = 0.005;   // mean update rate
 
-    public:
-        // The constructor and destructor are not implemented yet
-        Ipv4AntNetLocalTrafficStatisticsEntry();
-        ~Ipv4AntNetLocalTrafficStatisticsEntry();
+    static inline constexpr uint32_t MAX_WINDOW_SIZE = 5 * (C / MU);
 
+  public:
+    Ipv4AntNetLocalTrafficStatisticsEntry();
+    ~Ipv4AntNetLocalTrafficStatisticsEntry() = default;
 
-        /**
-         * @brief Update statistics with a new delay measurement
-         * @param delay The measured delay from current node to the destination m_dest
-         */
-        void UpdateStatistics(Time delay);
-        /**
-         * @brief Increment data flow measure when a data packet is sent to m_dest
-         * For simplicity, we just increment by 1 for each data packet
-         */
-        void AddDataFlowMeasure();
-        
-        /**
-         * @return The destination address of this entry
-         */
-        Ipv4Address GetDestAddr() const { return m_dest; }
+    /**
+     * @brief Update statistics with new delay measurement.
+     */
+    void UpdateStatistics(Time delay);
 
-        /**
-         * @return The destination network mask of this entry
-         */
-        Ipv4Mask GetDestMask() const { return m_destNetworkMask; }
+    /**
+     * @brief Increment flow count
+     */
+    void AddDataFlowMeasure();
 
-        /**
-         * @return The data flow measure (number of data packets sent to the destination m_dest)
-         */
-        double GetDataFlowMeasure() const { return m_dataFlowMeasure; }
+    inline Ipv4Address GetDestAddr() const { return m_dest; }
+    inline Ipv4Mask GetDestMask() const { return m_destNetworkMask; }
+    inline double GetDataFlowMeasure() const { return m_dataFlowMeasure; }
+    inline double GetMeanDelay() const { return m_meanDelay; }
+    inline double GetDelayVariance() const { return m_delayVariance; }
 
-        /**
-         * @return The mean delay to the destination m_dest
-         */
-        double GetMeanDelay() const { return m_meanDelay; }
+    /**
+     * @return minimum (best) delay in window
+     */
+    double GetBestDelayFromWindow() const;
 
-        /**
-         * @return The delay variance to the destination m_dest
-         */
-        double GetDelayVariance() const { return m_delayVariance; }
-
-        /**
-         * @return The best (minimum) delay from the sliding window with size MAX_WINDOW_SIZE
-         */
-        double GetBestDelayFromWindow() const;
-
-        /**
-         * @return The upper bound delay (not implemented yet)
-         */
-        double GetUpperBoundDelayFromWindow() const;
+    /**
+     * @return upper bound delay (TBD)
+     */
+    double GetUpperBoundDelayFromWindow() const;
 };
 
 } // namespace ns3
+
 #endif /* IPV4_ANTNET_LOCAL_TRAFFIC_STATISTICS_ENTRY_H */
+
