@@ -38,5 +38,6 @@ static FourNodeSuite staticFourNodeSuite;
 void FourNodeCase
     ::DoRun()
 {
-    std::cout << "test passed\n";
+    NS_TEST_ASSERT_MSG_EQ(1, 2, "try fail test");
+    // NS_TEST_ASSERT_MSG_EQ(1, 1, "try success test");
 }
