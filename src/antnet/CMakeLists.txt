@@ -26,22 +26,22 @@ build_lib(
 # ---- AntNet Examples ----
 
 # p2p-examples 可执行文件
-set(example_source_files
-  examples/p2p-examples.cc
-)
+# set(example_source_files
+#   examples/p2p-examples.cc
+# )
 
-build_exec(
-  EXECNAME p2p-examples
-  SOURCE_FILES
-    ${example_source_files}
-  LIBRARIES_TO_LINK
-    ${libantnet}
-    ${libinternet}
-    ${libnetwork}
-    ${libcore}
-    ${libpoint-to-point}
-)
+# build_exec(
+#   EXECNAME p2p-examples
+#   SOURCE_FILES
+#     ${example_source_files}
+#   LIBRARIES_TO_LINK
+#     ${libantnet}
+#     ${libinternet}
+#     ${libnetwork}
+#     ${libcore}
+#     ${libpoint-to-point}
+# )
 
-set_target_properties(p2p-examples PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-)
+# set_target_properties(p2p-examples PROPERTIES
+#   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+# )
