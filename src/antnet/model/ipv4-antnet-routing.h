@@ -52,11 +52,11 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
                         const ErrorCallback& ecb) override;
 
         // These functions are not implemented yet
-        void NotifyInterfaceUp(uint32_t interface);
-        void NotifyInterfaceDown(uint32_t interface);
-        void NotifyAddAddress(uint32_t interface, Ipv4InterfaceAddress address);
-        void NotifyRemoveAddress(uint32_t interface, Ipv4InterfaceAddress address);
-        void SetIpv4(Ptr<Ipv4> ipv4);
+        void NotifyInterfaceUp(uint32_t interface) override;
+        void NotifyInterfaceDown(uint32_t interface) override;
+        void NotifyAddAddress(uint32_t interface, Ipv4InterfaceAddress address) override;
+        void NotifyRemoveAddress(uint32_t interface, Ipv4InterfaceAddress address) override;
+        void SetIpv4(Ptr<Ipv4> ipv4) override;
         void PrintRoutingTable(Ptr<OutputStreamWrapper> stream,
                                Time::Unit unit = Time::S) const override;
 
