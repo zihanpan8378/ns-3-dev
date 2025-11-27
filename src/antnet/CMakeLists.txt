@@ -1,5 +1,6 @@
 set(source_files
   helper/ipv4-antnet-routing-helper.cc
+  test/test-four-node.cc
   model/ant-header.cc
   model/ipv4-antnet-routing-table-entry.cc
   model/ipv4-antnet-local-traffic-statistics-entry.cc
