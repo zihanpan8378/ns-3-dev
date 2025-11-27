@@ -120,7 +120,7 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         // Pointer to the Ipv4 instance
         Ptr<Ipv4> m_ipv4;
         // Interval to send forward ants
-        Time m_forwardAntInterval = Seconds(5);
+        Time m_forwardAntInterval;
         // Event ID for scheduled forward ant sending
         EventId m_forwardAntEvent;
 };

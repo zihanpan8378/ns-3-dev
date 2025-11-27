@@ -11,6 +11,7 @@
 #include "ns3/simulator.h"
 #include "ns3/timestamp-tag.h"
 #include "ns3/ipv4-route.h"
+#include "ns3/nstime.h"
 
 #include <iomanip>
 #include <vector>
@@ -28,8 +29,12 @@ Ipv4AntNetRouting::GetTypeId()
         TypeId("ns3::Ipv4AntNetRouting")
             .SetParent<Ipv4RoutingProtocol>()
             .SetGroupName("Internet")
-            .AddConstructor<Ipv4AntNetRouting>();
-            // Additional attributes can be added here
+            .AddConstructor<Ipv4AntNetRouting>()
+            .AddAttribute("ForwardAntInterval",
+                          "Interval between sending forward ants from this node.",
+                          TimeValue(Seconds(5)),
+                          MakeTimeAccessor(&Ipv4AntNetRouting::m_forwardAntInterval),
+                          MakeTimeChecker());
     return tid;
 }
 
