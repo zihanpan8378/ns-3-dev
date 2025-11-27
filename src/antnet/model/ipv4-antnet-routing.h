@@ -9,6 +9,8 @@
 #include "ns3/ipv4-header.h"
 #include "ns3/ipv4-routing-protocol.h"
 #include "ns3/ipv4.h"
+#include "ns3/event-id.h"
+#include "ns3/nstime.h"
 
 #include <list>
 #include <stdint.h>
@@ -52,11 +54,11 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
                         const ErrorCallback& ecb) override;
 
         // These functions are not implemented yet
-        void NotifyInterfaceUp(uint32_t interface);
-        void NotifyInterfaceDown(uint32_t interface);
-        void NotifyAddAddress(uint32_t interface, Ipv4InterfaceAddress address);
-        void NotifyRemoveAddress(uint32_t interface, Ipv4InterfaceAddress address);
-        void SetIpv4(Ptr<Ipv4> ipv4);
+        void NotifyInterfaceUp(uint32_t interface) override;
+        void NotifyInterfaceDown(uint32_t interface) override;
+        void NotifyAddAddress(uint32_t interface, Ipv4InterfaceAddress address) override;
+        void NotifyRemoveAddress(uint32_t interface, Ipv4InterfaceAddress address) override;
+        void SetIpv4(Ptr<Ipv4> ipv4) override;
         void PrintRoutingTable(Ptr<OutputStreamWrapper> stream,
                                Time::Unit unit = Time::S) const override;
 
@@ -111,9 +113,16 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         typedef std::list<Ipv4AntNetRoutingTableEntry> RoutingTable;
         typedef std::list<Ipv4AntNetLocalTrafficStatisticsEntry> LocalTrafficStatisticsTable;
 
+        // Routing table
         RoutingTable m_routingTable;
+        // Local traffic statistics table
         LocalTrafficStatisticsTable m_localTrafficStatsTable;
+        // Pointer to the Ipv4 instance
         Ptr<Ipv4> m_ipv4;
+        // Interval to send forward ants
+        Time m_forwardAntInterval = Seconds(5);
+        // Event ID for scheduled forward ant sending
+        EventId m_forwardAntEvent;
 };
 
 } // Namespace ns3

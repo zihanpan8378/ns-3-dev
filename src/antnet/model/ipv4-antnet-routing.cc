@@ -9,7 +9,6 @@
 #include "ns3/object.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
-#include "ns3/nstime.h"
 #include "ns3/timestamp-tag.h"
 #include "ns3/ipv4-route.h"
 
@@ -185,6 +184,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
         // Make a copy of the packet to remove header
         Ptr<Packet> copy = p->Copy();
         AntHeader antHeader;
+
         bool ok = copy->RemoveHeader(antHeader);
         if (!ok) {
             NS_LOG_ERROR("Failed to remove AntHeader");
@@ -238,8 +238,16 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                 // Relay forward ant
                 Ptr<Ipv4Route> route = LookupRoute(header.GetDestination());
                 if (route) {
+                    // Add ant header back to packet
                     copy->AddHeader(antHeader);
-                    ucb(route, copy, header);
+
+                    // Update payload size and ttl in ipv4 header
+                    Ipv4Header newHeader = header;
+                    newHeader.SetTtl (header.GetTtl() - 1);
+                    newHeader.SetPayloadSize (copy->GetSize());
+
+                    // Call unicast forward callback to send the packet
+                    ucb(route, copy, newHeader);
                     return true;
                 } else {
                     NS_LOG_ERROR("No route found for forward ant");
@@ -328,8 +336,17 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                 priorityTag.SetPriority(7);
                 copy->AddPacketTag(priorityTag);
 
+                // Add ant header back to packet
                 copy->AddHeader(antHeader);
-                ucb(route, copy, header);
+
+                // Update payload size and ttl in ipv4 header
+                Ipv4Header newHeader = header;
+                newHeader.SetTtl (header.GetTtl() - 1);
+                newHeader.SetPayloadSize (copy->GetSize());
+
+                // Call unicast forward callback to send the packet
+                ucb(route, copy, newHeader);
+
                 return true;
             } else {
                 NS_LOG_ERROR("No route found for backward ant to " << nextBackwardHopAddr);
@@ -385,6 +402,9 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
 }
 
 void Ipv4AntNetRouting::ScheduleForwardAnt() {
+    NS_LOG_INFO("Scheduling forward ant");
+
+
     NS_LOG_FUNCTION(this);
     // Select destination based on local traffic statistics using weighted random selection
     // The weight is the data flow measure
@@ -402,6 +422,13 @@ void Ipv4AntNetRouting::ScheduleForwardAnt() {
             break;
         }
     }
+
+    // Reschedule the next forward ant event
+    m_forwardAntEvent = Simulator::Schedule(
+        m_forwardAntInterval,
+        &Ipv4AntNetRouting::ScheduleForwardAnt,
+        this
+    );
 }
 
 void Ipv4AntNetRouting::InitializeRoutingTable(
@@ -460,6 +487,12 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
         Ipv4AntNetRoutingTableEntry newEntry(destAddr, destMask, pheromoneList);
         m_routingTable.push_back(newEntry);
     }
+
+    m_forwardAntEvent = Simulator::Schedule(
+        m_forwardAntInterval,
+        &Ipv4AntNetRouting::ScheduleForwardAnt,
+        this
+    );
 }
 
 void Ipv4AntNetRouting::SendForwardAnt(Ipv4Address dest) const {

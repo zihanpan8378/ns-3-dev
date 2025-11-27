@@ -13,7 +13,7 @@ NS_LOG_COMPONENT_DEFINE("Ipv4AntNetLocalTrafficStatisticsEntry");
 Ipv4AntNetLocalTrafficStatisticsEntry::Ipv4AntNetLocalTrafficStatisticsEntry(Ipv4Address dest, Ipv4Mask destNetworkMask) 
     : m_dest(dest),
       m_destNetworkMask(destNetworkMask),
-      m_dataFlowMeasure(0.0),
+      m_dataFlowMeasure(1.0),
       m_meanDelay(0.0),
       m_delayVariance(0.0),
       m_delayWindow({})

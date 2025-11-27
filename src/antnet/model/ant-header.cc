@@ -27,8 +27,9 @@ AntHeader::GetInstanceTypeId () const
 uint32_t
 AntHeader::GetSerializedSize() const
 {
-    // 1 byte for type + 4 bytes for stack size + (4 bytes for IP + 8 bytes for time) per entry
-    return 1 + 4 + (m_forwardStack.size() + m_backwardStack.size()) * (4 + 8); 
+    // 1 byte for type + 4 bytes for stack size * 2 for two stacks + (4 bytes for IP + 8 bytes for time) per entry
+    uint32_t size = 1 + 4 * 2 + (m_forwardStack.size() + m_backwardStack.size()) * (4 + 8);
+    return size;
 }
 
 void
@@ -38,10 +39,10 @@ AntHeader::Serialize(Buffer::Iterator start) const
     start.WriteU8(static_cast<uint8_t>(m_type));
 
     // Serialize forward stack
-    start.WriteU32(m_forwardStack.size());
+    start.WriteHtonU32(m_forwardStack.size());
     for (uint32_t i = 0; i < m_forwardStack.size(); ++i) {
         // Serialize address
-        start.WriteU32(m_forwardStack[i].GetAddress().Get());
+        start.WriteHtonU32(m_forwardStack[i].GetAddress().Get());
 
         // Serialize time
         int64_t t = m_forwardStack[i].GetTime().GetNanoSeconds ();
@@ -49,10 +50,10 @@ AntHeader::Serialize(Buffer::Iterator start) const
     }
 
     // Serialize backward stack
-    start.WriteU32(m_backwardStack.size());
+    start.WriteHtonU32(m_backwardStack.size());
     for (uint32_t i = 0; i < m_backwardStack.size(); ++i) {
         // Serialize address
-        start.WriteU32(m_backwardStack[i].GetAddress().Get());
+        start.WriteHtonU32(m_backwardStack[i].GetAddress().Get());
 
         // Serialize time
         int64_t t = m_backwardStack[i].GetTime().GetNanoSeconds ();
@@ -69,11 +70,10 @@ AntHeader::Deserialize(Buffer::Iterator start)
     // Deserialize forward stack
     m_forwardStack.clear();
     // Deserialize size
-    uint32_t forwardStackSize = start.ReadU32();
+    uint32_t forwardStackSize = start.ReadNtohU32();
     for (uint32_t i = 0; i < forwardStackSize; ++i) {
         // Deserialize address
-        uint32_t ipInt = start.ReadU32();
-
+        uint32_t ipInt = start.ReadNtohU32();
         // Deserialize time
         uint64_t v = start.ReadNtohU64 ();
         int64_t t = static_cast<int64_t> (v);
@@ -90,10 +90,10 @@ AntHeader::Deserialize(Buffer::Iterator start)
     // Deserialize backward stack
     m_backwardStack.clear();
     // Deserialize size
-    uint32_t backwardStackSize = start.ReadU32();
+    uint32_t backwardStackSize = start.ReadNtohU32();
     for (uint32_t i = 0; i < backwardStackSize; ++i) {
         // Deserialize address
-        uint32_t ipInt = start.ReadU32();
+        uint32_t ipInt = start.ReadNtohU32();
         // Deserialize time
         uint64_t v = start.ReadNtohU64 ();
         int64_t t = static_cast<int64_t> (v);
@@ -108,7 +108,7 @@ AntHeader::Deserialize(Buffer::Iterator start)
     }
 
     // Return total size consumed
-    return 1 + 4 + (m_forwardStack.size() + m_backwardStack.size()) * (4 + 8);
+    return 1 + 4 * 2 + (forwardStackSize + backwardStackSize) * (4 + 8);
 }
 
 void

@@ -47,6 +47,8 @@ main(int argc, char* argv[])
     // Enable logging
     LogComponentEnable("SimpleAntNetExample", LOG_LEVEL_INFO);
     LogComponentEnable("Ipv4AntNetRoutingHelper", LOG_LEVEL_INFO);
+    LogComponentEnable("Ipv4AntNetRouting", LOG_LEVEL_INFO);
+    LogComponentEnable("AntHeader", LOG_LEVEL_INFO);
     
     // Set up some default values for the simulation.  Use the
     Config::SetDefault("ns3::OnOffApplication::PacketSize", UintegerValue(210));
@@ -75,6 +77,7 @@ main(int argc, char* argv[])
 
     p2p.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
     p2p.SetChannelAttribute("Delay", StringValue("2ms"));
+    p2p.SetDeviceAttribute ("Mtu", UintegerValue (1500));
     NetDeviceContainer d0d2 = p2p.Install(n0n2);
     NetDeviceContainer d1d2 = p2p.Install(n1n2);
 
@@ -102,7 +105,7 @@ main(int argc, char* argv[])
 
     // Run Simulation
     NS_LOG_INFO("Run Simulation.");
-    Simulator::Stop(Seconds(11));
+    Simulator::Stop(Seconds(20));
     Simulator::Run();
     NS_LOG_INFO("Done.");
 }
