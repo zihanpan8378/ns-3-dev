@@ -39,7 +39,8 @@ Ipv4AntNetRouting::GetTypeId()
 }
 
 Ipv4AntNetRouting::Ipv4AntNetRouting()
-    : m_ipv4(nullptr)
+    : m_ipv4(nullptr),
+      m_roundNumber(0)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -195,6 +196,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             NS_LOG_ERROR("Failed to remove AntHeader");
             return false;
         }
+        NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Ipv4AntNetRouting::RouteInput: Receive forward ant: " << antHeader.ToString());
         
         // Process based on ant type
         AntHeader::Type antType = antHeader.GetAntType();
@@ -233,6 +235,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                     back_packet->AddPacketTag(priorityTag);
 
                     back_packet->AddHeader(antHeader);
+                    NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send backward ant: " << antHeader.ToString());
                     m_ipv4->Send(back_packet, route->GetSource(), nextHopAddr, PROTOCOL_ANTNET, route);
                     return true;
                 } else {
@@ -251,6 +254,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                     newHeader.SetTtl (header.GetTtl() - 1);
                     newHeader.SetPayloadSize (copy->GetSize());
 
+                    NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Relay forward ant: " << antHeader.ToString());
                     // Call unicast forward callback to send the packet
                     ucb(route, copy, newHeader);
                     return true;
@@ -349,6 +353,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                 newHeader.SetTtl (header.GetTtl() - 1);
                 newHeader.SetPayloadSize (copy->GetSize());
 
+                NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Relay backward ant: " << antHeader.ToString());
                 // Call unicast forward callback to send the packet
                 ucb(route, copy, newHeader);
 
@@ -407,9 +412,6 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
 }
 
 void Ipv4AntNetRouting::ScheduleForwardAnt() {
-    NS_LOG_INFO("Scheduling forward ant");
-
-
     NS_LOG_FUNCTION(this);
     // Select destination based on local traffic statistics using weighted random selection
     // The weight is the data flow measure
@@ -500,7 +502,7 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
     );
 }
 
-void Ipv4AntNetRouting::SendForwardAnt(Ipv4Address dest) const {
+void Ipv4AntNetRouting::SendForwardAnt(Ipv4Address dest) {
     NS_LOG_FUNCTION(this << dest);
 
     // Create a new packet for the forward ant
@@ -514,14 +516,21 @@ void Ipv4AntNetRouting::SendForwardAnt(Ipv4Address dest) const {
     }
 
     // Create and init AntHeader
-    AntHeader antHeader;
+    AntHeader antHeader(
+        AntHeader::Type::FORWARD_ANT,                                               // Ant type
+        m_ipv4->GetObject<Node>()->GetId(),                                         // Source node ID
+        m_ipv4->GetAddress(route->GetOutputDevice()->GetIfIndex(), 0).GetLocal(),   // Source address
+        dest,                                                                       // Destination address
+        m_roundNumber                                                               // Round number
+    );
     Ipv4Address source = route->GetSource();
     antHeader.AddForwardHop(source, Simulator::Now()); // Initial hop with current node and current time
-    antHeader.SetAntType(AntHeader::Type::FORWARD_ANT);
     p->AddHeader(antHeader);
 
+    NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send forward ant: " << antHeader.ToString());
     // Call Ipv4 L3 protocol's Send method to send the packet
     m_ipv4->Send(p, source, dest, PROTOCOL_ANTNET, route);
+    m_roundNumber++;
 }
 
 Ptr<Ipv4Route> Ipv4AntNetRouting::LookupRoute(Ipv4Address dest, Ptr<NetDevice> oif) const {

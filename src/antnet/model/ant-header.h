@@ -20,8 +20,9 @@ class AntHeader : public Header
 
         class AntHeaderStackEntry
         {
-            Ipv4Address address;
-            Time time;
+            private:
+                Ipv4Address address;
+                Time time;
 
             public:
                 AntHeaderStackEntry(Ipv4Address addr, Time t)
@@ -35,9 +36,23 @@ class AntHeader : public Header
         Type m_type;
         std::vector<AntHeaderStackEntry> m_forwardStack;
         std::vector<AntHeaderStackEntry> m_backwardStack;
-        
+
+        uint32_t m_sourceNodeId;
+        Ipv4Address m_sourceAddress;
+        Ipv4Address m_destinationAddress;
+        uint32_t m_round;
 
     public:
+        AntHeader();
+
+        AntHeader(
+            Type type,
+            uint32_t sourceNodeId,
+            Ipv4Address source,
+            Ipv4Address destination,
+            uint32_t round
+        );
+
         static TypeId GetTypeId();
 
         virtual TypeId GetInstanceTypeId () const override;
@@ -49,6 +64,8 @@ class AntHeader : public Header
         virtual uint32_t Deserialize(Buffer::Iterator start) override;
 
         virtual void Print(std::ostream& os) const override;
+
+        std::string ToString() const;
 
         /**
          * @brief Add a hop to the stack when relaying a forward ant

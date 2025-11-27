@@ -84,7 +84,7 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
          * @brief Send a forward ant to the specified destination
          * @param dest The destination address
          */
-        void SendForwardAnt(Ipv4Address dest) const;
+        void SendForwardAnt(Ipv4Address dest);
 
         /**
          * @brief Lookup a route in the routing table for the given destination and output interface (if any)
@@ -123,6 +123,8 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         Time m_forwardAntInterval;
         // Event ID for scheduled forward ant sending
         EventId m_forwardAntEvent;
+        // Current round number for forward ants
+        uint32_t m_roundNumber;
 };
 
 } // Namespace ns3
