@@ -76,6 +76,12 @@ class Ipv4AntNetRoutingTableEntry
          */
         PheromoneKey GetNextHop(Ptr<NetDevice> oif = nullptr) const;
         /**
+         * @brief Get the next hop deterministically based on the given next hop address
+         * @param nextHopAddr The address of the next hop
+         * @return The next hop (address and out interface) with the highest pheromone value
+         */
+        PheromoneKey GetDeterministicNextHop(Ipv4Address nextHopAddr) const;
+        /**
          * @brief Update pheromone values for the given destination and nextHop address.
          * @param dest The destination address
          * @param nextHop The address of the next hop the packet was sent to

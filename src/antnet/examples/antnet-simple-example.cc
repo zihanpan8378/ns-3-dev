@@ -53,7 +53,7 @@ main(int argc, char* argv[])
     // Set up some default values for the simulation.  Use the
     Config::SetDefault("ns3::OnOffApplication::PacketSize", UintegerValue(210));
     Config::SetDefault("ns3::OnOffApplication::DataRate", StringValue("448kb/s"));
-    Config::SetDefault("ns3::Ipv4AntNetRouting::ForwardAntInterval", TimeValue(Seconds(3)));
+    Config::SetDefault("ns3::Ipv4AntNetRouting::ForwardAntInterval", TimeValue(Seconds(10)));
 
     CommandLine cmd(__FILE__);
     bool enableFlowMonitor = false;
@@ -106,7 +106,7 @@ main(int argc, char* argv[])
 
     // Run Simulation
     NS_LOG_INFO("Run Simulation.");
-    Simulator::Stop(Seconds(25));
+    Simulator::Stop(Seconds(15));
     Simulator::Run();
     NS_LOG_INFO("Done.");
 }

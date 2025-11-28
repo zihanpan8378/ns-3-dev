@@ -91,9 +91,10 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
          * Will find the route with the most matching prefix (highest mask length)
          * @param dest The destination address
          * @param oif The output interface (if any)
+         * @param backwardAntLookup True if looking up route for backward ant (next hop is given deterministically), false otherwise
          * @return Pointer of the route if found, nullptr otherwise
          */
-        Ptr<Ipv4Route> LookupRoute(Ipv4Address dest, Ptr<NetDevice> oif = nullptr) const;
+        Ptr<Ipv4Route> LookupRoute(Ipv4Address dest, Ptr<NetDevice> oif = nullptr, bool backwardAntLookup = false) const;
 
         /**
          * @brief Find routing table entry for the given destination

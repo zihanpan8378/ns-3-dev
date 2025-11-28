@@ -135,6 +135,19 @@ Ipv4AntNetRoutingTableEntry::GetNextHop(Ptr<NetDevice> oif) const
     return searchList.back().first;
 }
 
+Ipv4AntNetRoutingTableEntry::PheromoneKey 
+Ipv4AntNetRoutingTableEntry::GetDeterministicNextHop(Ipv4Address nextHopAddr) const
+{
+    NS_LOG_FUNCTION(this << nextHopAddr);
+    for (const auto& entry : m_pheromoneList) {
+        if (entry.first.first == nextHopAddr) {
+            return entry.first;
+        }
+    }
+    // If not found, return zero address and interface 0 (should not happen)
+    return Ipv4AntNetRoutingTableEntry::PheromoneKey(Ipv4Address::GetZero(), 0);
+}
+
 void 
 Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const
 {
