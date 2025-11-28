@@ -18,17 +18,25 @@ class AntHeader : public Header
             BACKWARD_ANT = 1
         };
 
+        /**
+         * @brief An entry in the ant header stack
+         * Represents a hop with its incoming addresses (which interface address it is received on) 
+         *                       and outgoing addresses (which interface address it is sent out)
+         *                       and the time when the ant reached this hop
+         */
         class AntHeaderStackEntry
         {
             private:
-                Ipv4Address address;
+                Ipv4Address addressIn;
+                Ipv4Address addressOut;
                 Time time;
 
             public:
-                AntHeaderStackEntry(Ipv4Address addr, Time t)
-                    : address(addr), time(t) {}
+                AntHeaderStackEntry(Ipv4Address addrIn, Ipv4Address addrOut, Time t)
+                    : addressIn(addrIn), addressOut(addrOut), time(t) {}
 
-                Ipv4Address GetAddress() const { return address; }
+                Ipv4Address GetAddressIn() const { return addressIn; }
+                Ipv4Address GetAddressOut() const { return addressOut; }
                 Time GetTime() const { return time; }
         };
 
@@ -69,10 +77,11 @@ class AntHeader : public Header
 
         /**
          * @brief Add a hop to the stack when relaying a forward ant
-         * @param hopAddress The address of the hop to add
+         * @param hopInAddress The incoming address of the current hop to add
+         * @param hopOutAddress The outgoing address of the current hop to add
          * @param time The time when reached this hop
          */
-        void AddForwardHop(Ipv4Address hopAddress, Time time);
+        void AddForwardHop(Ipv4Address hopInAddress, Ipv4Address hopOutAddress, Time time);
 
         /**
          * @brief Pop the top hop from the forward stack, and add it to the backward stack

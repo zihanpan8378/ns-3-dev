@@ -190,7 +190,6 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
         // Make a copy of the packet to remove header
         Ptr<Packet> copy = p->Copy();
         AntHeader antHeader;
-
         bool ok = copy->RemoveHeader(antHeader);
         if (!ok) {
             NS_LOG_ERROR("Failed to remove AntHeader");
@@ -204,10 +203,10 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             // Process forward ant
             NS_LOG_LOGIC("Processing forward ant to " << header.GetDestination());
 
-            // Probably we need to move this stack append to the sending time, and use oif address
-            // since we will use oif to receive the backward ant
-            // Or probably we should have both oif address and iif address in the stack entry
-            antHeader.AddForwardHop(m_ipv4->GetAddress(iif, 0).GetLocal(), Simulator::Now());
+            // Get in-address for current hop and current time for stack in ant header. 
+            // Out-address will be set when sending ant out.
+            Ipv4Address inAddr = m_ipv4->GetAddress(iif, 0).GetLocal();
+            Time now = Simulator::Now();
 
             // Check if the current node is the destination
             if (m_ipv4->IsDestinationAddress(header.GetDestination(), iif)) {
@@ -215,15 +214,20 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                 // Flip to backward ant and send back
                 NS_LOG_LOGIC("Forward ant reached destination " << header.GetDestination() << ", converting to backward ant");
                 
+                // Add final hop to forward stack
+                // For the final hop, inAddr and outAddr are the same since ant reached destination and reversal will start from here
+                antHeader.AddForwardHop(inAddr, inAddr, now);
+
                 // Convert forward ant to backward ant
                 antHeader.SetAntType(AntHeader::Type::BACKWARD_ANT);
                 antHeader.PopForwardStackEntryToBackwardStack(); // Move destination from forward to backward stack
-                
+
                 // Send backward ant to next hop
                 AntHeader::AntHeaderStackEntry nextHop = antHeader.PopForwardStackEntryToBackwardStack(); // Get next hop and move it to backward stack
-                Ipv4Address nextHopAddr = nextHop.GetAddress();
+                Ipv4Address nextHopAddr = nextHop.GetAddressOut();
                 // Since backward ants are sent throught the original path
                 // we lookup route to next hop (previous hop when forward) rather than the destination (source node when forward)
+                // The next hop is chosen deterministically from the stack since it follows the reversed original path
                 Ptr<Ipv4Route> route = LookupRoute(nextHopAddr, nullptr, true);
                 if (route) {
                     // Make a new packet for backward ant
@@ -234,8 +238,11 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                     priorityTag.SetPriority(7);
                     back_packet->AddPacketTag(priorityTag);
 
+                    // Add ant header back to packet
                     back_packet->AddHeader(antHeader);
                     NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send backward ant to next hop " << nextHopAddr << " from interface " << route->GetOutputDevice()->GetIfIndex() << ". Ant: " << antHeader.ToString());
+                    
+                    // Send the backward ant packet
                     m_ipv4->Send(back_packet, route->GetSource(), nextHopAddr, PROTOCOL_ANTNET, route);
                     return true;
                 } else {
@@ -246,6 +253,9 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                 // Relay forward ant
                 Ptr<Ipv4Route> route = LookupRoute(header.GetDestination());
                 if (route) {
+                    // Add current hop to forward stack
+                    antHeader.AddForwardHop(inAddr, route->GetSource(), now);
+
                     // Add ant header back to packet
                     copy->AddHeader(antHeader);
 
@@ -270,7 +280,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             // Update local traffic statistics and routing table pheromones
             std::vector<AntHeader::AntHeaderStackEntry> backwardStack = antHeader.GetBackwardStack();
             AntHeader::AntHeaderStackEntry antDestinationEntry = backwardStack.front();
-            Ipv4Address antDestinationAddr = antDestinationEntry.GetAddress();
+            Ipv4Address antDestinationAddr = antDestinationEntry.GetAddressIn();
             Time antDestinationTime = antDestinationEntry.GetTime();
             Time delay = antDestinationTime - backwardStack.back().GetTime();
             
@@ -286,7 +296,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             }
             
             // Update routing table pheromones for destination
-            Ipv4Address nextForwardHopAddr = backwardStack[backwardStack.size() - 2].GetAddress();
+            Ipv4Address nextForwardHopAddr = backwardStack[backwardStack.size() - 2].GetAddressIn();
             Ipv4AntNetRoutingTableEntry* routeEntry = FindRoutingTableEntry(antDestinationAddr);
             if (routeEntry) {
                 // Call the routing table entry's pheromone update method
@@ -342,11 +352,12 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
 
             // Relay backward ant to next hop
             AntHeader::AntHeaderStackEntry nextHop = antHeader.PopForwardStackEntryToBackwardStack();
-            Ipv4Address nextBackwardHopAddr = nextHop.GetAddress();
+            Ipv4Address nextBackwardHopAddr = nextHop.GetAddressOut();
             // Since backward ants are sent throught the original path
             // we lookup route to next hop (previous hop when forward) rather than the destination (source node when forward)
             Ptr<Ipv4Route> route = LookupRoute(nextBackwardHopAddr, nullptr, true);
             if (route) {
+                // Create a new packet for next hop of backward ant
                 Ptr<Packet> newPacket = Create<Packet>();
                 
                 // Backward ants get high priority than forward ants and normal packets
@@ -528,7 +539,8 @@ void Ipv4AntNetRouting::SendForwardAnt(Ipv4Address dest) {
         m_roundNumber                                                               // Round number
     );
     Ipv4Address source = route->GetSource();
-    antHeader.AddForwardHop(source, Simulator::Now()); // Initial hop with current node and current time
+    // Initial hop with current node and current time. No in-address for first hop
+    antHeader.AddForwardHop(Ipv4Address("0.0.0.0"), source, Simulator::Now()); 
     p->AddHeader(antHeader);
 
     NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send forward ant: " << antHeader.ToString());
