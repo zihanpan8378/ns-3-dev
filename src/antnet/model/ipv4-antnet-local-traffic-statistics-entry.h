@@ -73,16 +73,25 @@ class Ipv4AntNetLocalTrafficStatisticsEntry
          */
         double GetDelayVariance() const { return m_delayVariance; }
 
+        /**
+         * @return The standard deviation of delay to the destination m_dest
+         */
         double GetStandardDeviation() const { return std::sqrt(std::max(m_delayVariance, 0.0)); }
+
+        /**
+         * @return The size of the sliding window
+         */
         int GetWindowSize() const { return m_delayWindow.size(); }
 
         /**
          * @return The best (minimum) delay from the sliding window with size MAX_WINDOW_SIZE
+         * This is I_inf in the paper
          */
         double GetBestDelayFromWindow() const;
 
         /**
-         * @return The upper bound delay (not implemented yet)
+         * @return The upper bound delay
+         * This is I_sup in the paper
          */
         double GetUpperBoundDelayFromWindow() const;
 };

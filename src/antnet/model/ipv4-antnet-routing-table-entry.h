@@ -74,6 +74,8 @@ class Ipv4AntNetRoutingTableEntry
         bool HasNextHop() const;
         /**
          * @brief Get the next hop with the highest pheromone value
+         * The pheromone value is adjusted based on the current queue lengths at each next hop if provided
+         * @param queueLengthMap map of next hop addresses to their current queue lengths
          * @param oif requested output interface if any (put nullptr otherwise)
          */
         PheromoneKey GetNextHop(std::map<Ipv4Address, double> queueLengthMap = std::map<Ipv4Address, double>(), Ptr<NetDevice> oif = nullptr) const;
@@ -85,8 +87,8 @@ class Ipv4AntNetRoutingTableEntry
         PheromoneKey GetDeterministicNextHop(Ipv4Address nextHopAddr) const;
         /**
          * @brief Update pheromone values for the given destination and nextHop address.
-         * @param dest The destination address
          * @param nextHop The address of the next hop the packet was sent to
+         * @param delayMillisecond The delay experienced to reach the destination in milliseconds
          * @param trafficStat The local traffic statistics entry for this destination
          */
         void UpdatePheromone(Ipv4Address nextHop, double delayMillisecond, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const;
