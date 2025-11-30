@@ -27,14 +27,16 @@ class AntHeader : public Header
         class AntHeaderStackEntry
         {
             private:
+                uint32_t nodeId;
                 Ipv4Address addressIn;
                 Ipv4Address addressOut;
                 Time time;
 
             public:
-                AntHeaderStackEntry(Ipv4Address addrIn, Ipv4Address addrOut, Time t)
-                    : addressIn(addrIn), addressOut(addrOut), time(t) {}
+                AntHeaderStackEntry(uint32_t nodeId, Ipv4Address addrIn, Ipv4Address addrOut, Time t)
+                    : nodeId(nodeId), addressIn(addrIn), addressOut(addrOut), time(t) {}
 
+                uint32_t GetNodeId() const { return nodeId; }
                 Ipv4Address GetAddressIn() const { return addressIn; }
                 Ipv4Address GetAddressOut() const { return addressOut; }
                 Time GetTime() const { return time; }
@@ -77,17 +79,34 @@ class AntHeader : public Header
 
         /**
          * @brief Add a hop to the stack when relaying a forward ant
+         * @param hopNodeId The node ID of the current hop to add
          * @param hopInAddress The incoming address of the current hop to add
          * @param hopOutAddress The outgoing address of the current hop to add
          * @param time The time when reached this hop
          */
-        void AddForwardHop(Ipv4Address hopInAddress, Ipv4Address hopOutAddress, Time time);
+        void AddForwardHop(uint32_t hopNodeId, Ipv4Address hopInAddress, Ipv4Address hopOutAddress, Time time);
 
         /**
          * @brief Pop the top hop from the forward stack, and add it to the backward stack
          * @return The top hop entry
          */
         AntHeaderStackEntry PopForwardStackEntryToBackwardStack();
+
+        /**
+         * @brief Pop cycles from the forward stack (if any)
+         * Checks if the current node address is already in the forward stack.
+         * If so, removes all entries from the top of the stack until (and including)
+         * the first occurrence of the current node address. 
+         * Then, check if the cycle takes longer time than half of the total ant travel time.
+         * If so, return false to indicate dropping the ant, otherwise return true.
+         * @param currentNodeId The node ID of the current node
+         * @param totalAntTravelTime The total time the ant has traveled so far
+         * @return A pair where the first element indicates if a cycle was found,
+         *         and the second element is the incoming address at which the cycle started
+         *         If the cycle is long enough to drop the ant, the second element is 0.0.0.0
+         *         If no cycle found, the second element is 0.0.0.0, but this value should be ignored
+         */
+        std::pair<bool, Ipv4Address> DetectAndPopForwardStackCycle(uint32_t currentNodeId, Time totalAntTravelTime);
 
         void SetAntType(Type type);
 

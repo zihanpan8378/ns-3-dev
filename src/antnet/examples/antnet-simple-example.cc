@@ -44,6 +44,9 @@ NS_LOG_COMPONENT_DEFINE("SimpleAntNetExample");
 int
 main(int argc, char* argv[])
 {
+    // Set random seed for reproducibility
+    std::srand(538);
+
     // Enable logging
     LogComponentEnable("SimpleAntNetExample", LOG_LEVEL_INFO);
     LogComponentEnable("Ipv4AntNetRoutingHelper", LOG_LEVEL_INFO);
@@ -104,9 +107,16 @@ main(int argc, char* argv[])
     Ipv4AntNetRoutingHelper::BuildAntNetTopology();
     Ipv4AntNetRoutingHelper::InitializeNodeRoutingTables();
 
+    // Print Initial Routing Tables
+    NS_LOG_INFO("Initial Routing Tables:");
+    Ipv4AntNetRoutingHelper::PrintRoutingTables();
+
     // Run Simulation
     NS_LOG_INFO("Run Simulation.");
-    Simulator::Stop(Seconds(15));
+    Simulator::Stop(Seconds(150));
     Simulator::Run();
-    NS_LOG_INFO("Done.");
+
+    // Print Final Routing Tables
+    NS_LOG_INFO("Final Routing Tables:");
+    Ipv4AntNetRoutingHelper::PrintRoutingTables();
 }

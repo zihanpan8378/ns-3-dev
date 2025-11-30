@@ -32,6 +32,8 @@ class Ipv4AntNetRoutingHelper : public Ipv4RoutingHelper
         static void BuildAntNetTopology();
 
         static void InitializeNodeRoutingTables();
+
+        static void PrintRoutingTables();
         
     private:
         static std::map<ns3::Ptr<ns3::Node>, std::list<std::pair<Ipv4Address, Ipv4Address>>> m_neighbourAdjList;

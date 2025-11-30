@@ -63,10 +63,10 @@ AntHeader::ToString() const
 uint32_t
 AntHeader::GetSerializedSize() const
 {
-    // 1 byte for type + 4 bytes for stack size * 2 for two stacks + (4 bytes for IP + 8 bytes for time) per entry
+    // 1 byte for type + 4 bytes for stack size * 2 for two stacks + (4 bytes for node ID + 4 bytes for IP + 8 bytes for time) per entry
     uint32_t typeSize = 1;
     uint32_t stackSize = 4;
-    uint32_t stackEntrySize = 4 + 4 + 8;
+    uint32_t stackEntrySize = 4 + 4 + 4 + 8;
     uint32_t sourceNodeIdSize = 4;
     uint32_t addressSize = 4;
     uint32_t roundSize = 4;
@@ -89,6 +89,9 @@ AntHeader::Serialize(Buffer::Iterator start) const
     // Serialize forward stack
     start.WriteHtonU32(m_forwardStack.size());
     for (uint32_t i = 0; i < m_forwardStack.size(); ++i) {
+        // Serialize node ID
+        start.WriteHtonU32(m_forwardStack[i].GetNodeId());
+
         // Serialize address
         start.WriteHtonU32(m_forwardStack[i].GetAddressIn().Get());
         start.WriteHtonU32(m_forwardStack[i].GetAddressOut().Get());
@@ -101,6 +104,9 @@ AntHeader::Serialize(Buffer::Iterator start) const
     // Serialize backward stack
     start.WriteHtonU32(m_backwardStack.size());
     for (uint32_t i = 0; i < m_backwardStack.size(); ++i) {
+        // Serialize node ID
+        start.WriteHtonU32(m_backwardStack[i].GetNodeId());
+
         // Serialize address
         start.WriteHtonU32(m_backwardStack[i].GetAddressIn().Get());
         start.WriteHtonU32(m_backwardStack[i].GetAddressOut().Get());
@@ -134,6 +140,9 @@ AntHeader::Deserialize(Buffer::Iterator start)
     // Deserialize size
     uint32_t forwardStackSize = start.ReadNtohU32();
     for (uint32_t i = 0; i < forwardStackSize; ++i) {
+        // Deserialize node ID
+        uint32_t nodeId = start.ReadNtohU32();
+
         // Deserialize address
         uint32_t ipInInt = start.ReadNtohU32();
         uint32_t ipOutInt = start.ReadNtohU32();
@@ -144,6 +153,7 @@ AntHeader::Deserialize(Buffer::Iterator start)
         // Add entry back to m_forwardStack
         m_forwardStack.push_back(
             AntHeaderStackEntry(
+                nodeId,
                 Ipv4Address(ipInInt), 
                 Ipv4Address(ipOutInt),
                 Time(NanoSeconds(t))
@@ -156,6 +166,9 @@ AntHeader::Deserialize(Buffer::Iterator start)
     // Deserialize size
     uint32_t backwardStackSize = start.ReadNtohU32();
     for (uint32_t i = 0; i < backwardStackSize; ++i) {
+        // Deserialize node ID
+        uint32_t nodeId = start.ReadNtohU32();
+
         // Deserialize address
         uint32_t ipInInt = start.ReadNtohU32();
         uint32_t ipOutInt = start.ReadNtohU32();
@@ -166,6 +179,7 @@ AntHeader::Deserialize(Buffer::Iterator start)
         // Add entry back to m_backwardStack
         m_backwardStack.push_back(
             AntHeaderStackEntry(
+                nodeId,
                 Ipv4Address(ipInInt), 
                 Ipv4Address(ipOutInt),
                 Time(NanoSeconds(t))
@@ -202,7 +216,7 @@ AntHeader::Print(std::ostream& os) const
 
     os << "    forwardPath=";
     for (uint32_t k = 0; k < m_forwardStack.size(); ++k) {
-        os << "(" << m_forwardStack[k].GetAddressIn() << "-" << m_forwardStack[k].GetAddressOut() << ":" << m_forwardStack[k].GetTime() << "ms)";
+        os << "(" << m_forwardStack[k].GetNodeId() << ":" << m_forwardStack[k].GetAddressIn() << "-" << m_forwardStack[k].GetAddressOut() << ":" << m_forwardStack[k].GetTime() << "ms)";
         if (k != m_forwardStack.size() - 1) {
             os << " -> ";
         }
@@ -211,7 +225,7 @@ AntHeader::Print(std::ostream& os) const
 
     os << "    returnPath=";
     for (uint32_t k = 0; k < m_backwardStack.size(); ++k) {
-        os << "(" << m_backwardStack[k].GetAddressIn() << "-" << m_backwardStack[k].GetAddressOut() << ":" << m_backwardStack[k].GetTime() << "ms)";
+        os << "(" << m_backwardStack[k].GetNodeId() << ":" << m_backwardStack[k].GetAddressIn() << "-" << m_backwardStack[k].GetAddressOut() << ":" << m_backwardStack[k].GetTime() << "ms)";
         if (k != m_backwardStack.size() - 1) {
             os << " -> ";
         }
@@ -220,16 +234,17 @@ AntHeader::Print(std::ostream& os) const
 }
 
 void
-AntHeader::AddForwardHop(Ipv4Address hopInAddress, Ipv4Address hopOutAddress, Time time)
+AntHeader::AddForwardHop(uint32_t hopNodeId, Ipv4Address hopInAddress, Ipv4Address hopOutAddress, Time time)
 {
-    m_forwardStack.push_back(AntHeaderStackEntry(hopInAddress, hopOutAddress, time));
+    m_forwardStack.push_back(AntHeaderStackEntry(hopNodeId, hopInAddress, hopOutAddress, time));
 }
 
 AntHeader::AntHeaderStackEntry
 AntHeader::PopForwardStackEntryToBackwardStack()
 {
     if (m_forwardStack.empty()) {
-        return AntHeaderStackEntry(Ipv4Address("0.0.0.0"), Ipv4Address("0.0.0.0"), Time(Seconds(0)));
+        NS_LOG_ERROR("Forward stack is empty, cannot pop entry.");
+        return AntHeaderStackEntry(0, Ipv4Address("0.0.0.0"), Ipv4Address("0.0.0.0"), Time(Seconds(0)));
     }
 
     AntHeaderStackEntry top = m_forwardStack.back();
@@ -239,6 +254,49 @@ AntHeader::PopForwardStackEntryToBackwardStack()
     m_backwardStack.push_back(top);
 
     return top;
+}
+
+std::pair<bool, Ipv4Address> 
+AntHeader::DetectAndPopForwardStackCycle(uint32_t currentNodeId, Time totalAntTravelTime)
+{
+    if (m_forwardStack.empty()) {
+        // No entries in forward stack, no cycle
+        return std::make_pair(false, Ipv4Address("0.0.0.0"));
+    }
+
+    if (m_sourceNodeId == currentNodeId) {
+        // Forward ant has returned to source node, drop the ant since it it a full cycle
+        return std::make_pair(true, Ipv4Address("0.0.0.0"));
+    }
+
+    // Iterate from top to bottom of the stack to find cycles
+    bool cycleFound = false;
+    Ipv4Address cycleStartAddress = Ipv4Address("0.0.0.0");
+    Time cycleStartTime = Time(Seconds(0));
+    for (int32_t i = m_forwardStack.size() - 1; i >= 0; --i) {
+        if (m_forwardStack[i].GetNodeId() == currentNodeId) {
+            cycleFound = true;
+            cycleStartTime = m_forwardStack[i].GetTime();
+            cycleStartAddress = m_forwardStack[i].GetAddressIn();
+            // Remove all entries from i to end
+            m_forwardStack.erase(m_forwardStack.begin() + i, m_forwardStack.end());
+            break;
+        }
+    }
+
+    if (cycleFound) {
+        // Check if cycle time is more than half of total ant travel time
+        Time cycleTime = totalAntTravelTime - cycleStartTime;
+        if (cycleTime.GetNanoSeconds() > (totalAntTravelTime.GetNanoSeconds() / 2)) {
+            return std::make_pair(false, Ipv4Address("0.0.0.0")); // Drop the ant
+        } else {
+            // If cycle is short, return true with cycle start address (incoming address at which cycle started)
+            return std::make_pair(true, cycleStartAddress);
+        }
+    }
+
+    // No cycle detected, return false
+    return std::make_pair(false, cycleStartAddress);
 }
 
 void

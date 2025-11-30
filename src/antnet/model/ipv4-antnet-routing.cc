@@ -195,7 +195,9 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             NS_LOG_ERROR("Failed to remove AntHeader");
             return false;
         }
-        NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Receive ant. Ant: " << antHeader.ToString());
+
+        uint32_t nodeId = m_ipv4->GetObject<Node>()->GetId();
+        NS_LOG_INFO("Node "<< nodeId << " Receive ant. Ant: " << antHeader.ToString());
         
         // Process based on ant type
         AntHeader::Type antType = antHeader.GetAntType();
@@ -208,6 +210,24 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             Ipv4Address inAddr = m_ipv4->GetAddress(iif, 0).GetLocal();
             Time now = Simulator::Now();
 
+            // Detect and handle cycles in forward ant's path
+            std::pair<bool, Ipv4Address> cycleResult = antHeader.DetectAndPopForwardStackCycle(nodeId, now);
+            bool cycleFound = cycleResult.first;
+            if (cycleFound) {
+                NS_LOG_INFO("    Detected cycle in forward ant's path. Popped cycle entries.");
+
+                // Check if cycle is long enough to drop the ant (DetectAndPopForwardStackCycle will return second as 0.0.0.0 if so)
+                if (cycleResult.second == Ipv4Address("0.0.0.0")) {
+                    NS_LOG_INFO("    Cycle is long enough to drop the ant.");
+                    return true;
+                }
+
+                // If cycle is short, update inAddr to the address at which cycle started, so backward ant can be sent correctly
+                inAddr = cycleResult.second;
+
+                // Didn't handle the time adjustment for cycle entries here for simplicity
+            }
+
             // Check if the current node is the destination
             if (m_ipv4->IsDestinationAddress(header.GetDestination(), iif)) {
                 // Process forward ant at destination
@@ -216,7 +236,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                 
                 // Add final hop to forward stack
                 // For the final hop, inAddr and outAddr are the same since ant reached destination and reversal will start from here
-                antHeader.AddForwardHop(inAddr, inAddr, now);
+                antHeader.AddForwardHop(nodeId, inAddr, inAddr, now);
 
                 // Convert forward ant to backward ant
                 antHeader.SetAntType(AntHeader::Type::BACKWARD_ANT);
@@ -240,7 +260,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
 
                     // Add ant header back to packet
                     back_packet->AddHeader(antHeader);
-                    NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send backward ant to next hop " << nextHopAddr << " from interface " << route->GetOutputDevice()->GetIfIndex() << ". Ant: " << antHeader.ToString());
+                    NS_LOG_INFO("Node "<< nodeId << " Send backward ant to next hop " << nextHopAddr << " from interface " << route->GetOutputDevice()->GetIfIndex() << ". Ant: " << antHeader.ToString());
                     
                     // Send the backward ant packet
                     m_ipv4->Send(back_packet, route->GetSource(), nextHopAddr, PROTOCOL_ANTNET, route);
@@ -254,7 +274,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                 Ptr<Ipv4Route> route = LookupRoute(header.GetDestination());
                 if (route) {
                     // Add current hop to forward stack
-                    antHeader.AddForwardHop(inAddr, route->GetSource(), now);
+                    antHeader.AddForwardHop(nodeId, inAddr, route->GetSource(), now);
 
                     // Add ant header back to packet
                     copy->AddHeader(antHeader);
@@ -288,6 +308,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             Ipv4AntNetLocalTrafficStatisticsEntry* trafficEntry = FindLocalTrafficStatisticsEntry(antDestinationAddr);
             if (trafficEntry) {
                 // Call the traffic stat entry's update method
+                trafficEntry->AddDataFlowMeasure();
                 trafficEntry->UpdateStatistics(delay);
                 NS_LOG_LOGIC("Updated local traffic statistics for destination " << antDestinationAddr);
             } else {
@@ -462,11 +483,27 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
     m_routingTable.clear();
     m_localTrafficStatsTable.clear();
 
+    // Get all addresses of the current node
+    std::vector<Ipv4Address> nodeAddresses;
+    for (uint32_t i = 0; i < m_ipv4->GetNInterfaces(); ++i) {
+        for (uint32_t j = 0; j < m_ipv4->GetNAddresses(i); ++j) {
+            Ipv4Address addr = m_ipv4->GetAddress(i, j).GetLocal();
+            if (addr != Ipv4Address() && addr != Ipv4Address("127.0.0.1")) {
+                nodeAddresses.push_back(addr);
+            }
+        }
+    }
+
     // Initial pheromone value, equally distributed among neighbours
     double initialPheromone = 1.0 / neighbourList.size();
 
     // Initialize routing table entries
     for (const auto& destAddrAndMask : destList) {
+        // Check if destination address is one of the node's own addresses, skip if so
+        if (std::find(nodeAddresses.begin(), nodeAddresses.end(), destAddrAndMask.first) != nodeAddresses.end()) {
+            continue;
+        }
+
         Ipv4Address destAddr = destAddrAndMask.first;
         Ipv4Mask destMask = Ipv4Mask(destAddrAndMask.second.Get());
 
@@ -474,7 +511,7 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
         Ipv4AntNetLocalTrafficStatisticsEntry trafficEntry(destAddr, destMask);
         m_localTrafficStatsTable.push_back(trafficEntry);
 
-        // Prepare pheromone list for this node
+        // Prepare pheromone list for this destination
         Ipv4AntNetRoutingTableEntry::PheromoneList pheromoneList;
         for (const auto& neighbourAddrAndMask : neighbourList) {
             Ipv4Address neighbourAddr = neighbourAddrAndMask.first;
@@ -539,11 +576,12 @@ void Ipv4AntNetRouting::SendForwardAnt(Ipv4Address dest) {
         m_roundNumber                                                               // Round number
     );
     Ipv4Address source = route->GetSource();
+    uint32_t nodeId = m_ipv4->GetObject<Node>()->GetId();
     // Initial hop with current node and current time. No in-address for first hop
-    antHeader.AddForwardHop(Ipv4Address("0.0.0.0"), source, Simulator::Now()); 
+    antHeader.AddForwardHop(nodeId, Ipv4Address("0.0.0.0"), source, Simulator::Now()); 
     p->AddHeader(antHeader);
 
-    NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send forward ant: " << antHeader.ToString());
+    NS_LOG_INFO("Node "<< nodeId << " Send forward ant: " << antHeader.ToString());
     // Call Ipv4 L3 protocol's Send method to send the packet
     m_ipv4->Send(p, source, dest, PROTOCOL_ANTNET, route);
     m_roundNumber++;
