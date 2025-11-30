@@ -17,7 +17,8 @@ Ipv4AntNetRoutingTableEntry::Ipv4AntNetRoutingTableEntry()
 Ipv4AntNetRoutingTableEntry::Ipv4AntNetRoutingTableEntry(const Ipv4AntNetRoutingTableEntry& route)
     : m_dest(route.m_dest),
       m_destNetworkMask(route.m_destNetworkMask),
-      m_pheromoneList(route.m_pheromoneList)
+      m_pheromoneList(route.m_pheromoneList),
+        m_visitedNextHops(route.m_visitedNextHops)
 {
     NS_LOG_FUNCTION(this << route);
 }
@@ -25,7 +26,8 @@ Ipv4AntNetRoutingTableEntry::Ipv4AntNetRoutingTableEntry(const Ipv4AntNetRouting
 Ipv4AntNetRoutingTableEntry::Ipv4AntNetRoutingTableEntry(const Ipv4AntNetRoutingTableEntry* route)
     : m_dest(route->m_dest),
       m_destNetworkMask(route->m_destNetworkMask),
-      m_pheromoneList(route -> m_pheromoneList)
+      m_pheromoneList(route->m_pheromoneList),
+      m_visitedNextHops(route->m_visitedNextHops)
 {
     NS_LOG_FUNCTION(this << route);
 }
@@ -35,9 +37,13 @@ Ipv4AntNetRoutingTableEntry::Ipv4AntNetRoutingTableEntry(Ipv4Address dest,
                                                          PheromoneList pheromoneList)
     : m_dest(dest),
       m_destNetworkMask(destNetworkMask),
-      m_pheromoneList(pheromoneList)
+      m_pheromoneList(pheromoneList),
+      m_visitedNextHops()
 {
     NS_LOG_FUNCTION(this << dest << destNetworkMask);
+    for (const auto& entry : pheromoneList) {
+        m_visitedNextHops[entry.first] = false;
+    }
 }
 
 std::string 
@@ -86,12 +92,8 @@ Ipv4AntNetRoutingTableEntry::HasNextHop() const
 }
 
 Ipv4AntNetRoutingTableEntry::PheromoneKey
-Ipv4AntNetRoutingTableEntry::GetNextHop(Ptr<NetDevice> oif) const
+Ipv4AntNetRoutingTableEntry::GetNextHop(std::map<Ipv4Address, double> queueLengthMap, Ptr<NetDevice> oif) const
 {
-    // The current implementation does not follow exactly the AntNet algorithm
-    // Please check the original paper and correct this function
-
-
     NS_LOG_FUNCTION(this);
 
     // If no next hops available, return zero address and interface 0 (should not happen)
@@ -99,40 +101,81 @@ Ipv4AntNetRoutingTableEntry::GetNextHop(Ptr<NetDevice> oif) const
         return Ipv4AntNetRoutingTableEntry::PheromoneKey(Ipv4Address::GetZero(), 0);
     }
 
-    PheromoneList searchList = m_pheromoneList;
-    if (oif) {
-        // Filter pheromone list by output interface
-        PheromoneList filteredList = {};
+    PheromoneList adjustedPheromoneList;
+    if (queueLengthMap.empty()) {
+        adjustedPheromoneList = m_pheromoneList;
+    } else {
+        double averageQueueLength = 0.0;
+        for (const auto& qlenEntry : queueLengthMap) {
+            averageQueueLength += qlenEntry.second;
+        }
+        averageQueueLength /= static_cast<double>(queueLengthMap.size());
+
+        
         for (const auto& entry : m_pheromoneList) {
+            PheromoneKey nextHopKey = entry.first;
+
+            // Find the corresponding queue length
+            double queueLength = 0.0;
+            auto it = queueLengthMap.find(entry.first.first);
+            if (it != queueLengthMap.end()) {
+                queueLength = it->second;
+            }
+
+            double ln = 1.0 - queueLength / (averageQueueLength + 1e-6); // Avoid division by zero
+            double adjustedPheromone = entry.second + (ALPHA * ln) / (1 + ALPHA * (queueLengthMap.size() - 1));
+            
+            adjustedPheromoneList.push_back(std::make_pair(nextHopKey, adjustedPheromone));
+        }
+    }
+
+    if (oif != nullptr) {
+        // Filter adjustedPheromoneList to only include entries matching the specified output interface
+        PheromoneList filteredList;
+        for (const auto& entry : adjustedPheromoneList) {
             if (entry.first.second == oif->GetIfIndex()) {
                 filteredList.push_back(entry);
             }
         }
-        // If no entries found for the requested interface, use all entries
-        if (filteredList.empty()) {
-            NS_LOG_WARN("No next hops found for the requested output interface. Using all next hops.");
-        } else {
-            searchList = filteredList;
+        if (!filteredList.empty()) {
+            adjustedPheromoneList = filteredList;
         }
     }
-    
+
+
+    // Check if all entries are visited before (not implemented yet)
+    // If all visited, use all entries, otherwise use only unvisited entries
+    PheromoneList candidates;
+    for (const auto& entry : adjustedPheromoneList) {
+        if (!m_visitedNextHops.at(entry.first)) {
+            candidates.push_back(entry);
+        }
+    }
+    if (candidates.empty()) {
+        candidates = adjustedPheromoneList;
+    }
+
     // Calculate total probability
     double totalProb = 0.0;
-    for (const auto& entry : searchList) {
+    for (const auto& entry : candidates) {
         totalProb += entry.second;
     }
+
     // Generate random number between 0 and totalProb
     double randomValue = static_cast<double>(rand()) / RAND_MAX * totalProb;
+
     // Select based on cumulative probability
     double cumulativeProb = 0.0;
-    for (const auto& entry : searchList) {
+    for (const auto& entry : candidates) {
         cumulativeProb += entry.second;
         if (randomValue <= cumulativeProb) {
+            m_visitedNextHops[entry.first] = true; // Mark as visited
             return entry.first;
         }
     }
     // Return the last entry if none selected (should not happen)
-    return searchList.back().first;
+    m_visitedNextHops[candidates.back().first] = true; // Mark as visited
+    return candidates.back().first;
 }
 
 Ipv4AntNetRoutingTableEntry::PheromoneKey 
@@ -149,15 +192,25 @@ Ipv4AntNetRoutingTableEntry::GetDeterministicNextHop(Ipv4Address nextHopAddr) co
 }
 
 void 
-Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const
+Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address nextHop, double delayMillisecond, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const
 {
     NS_LOG_FUNCTION(this << nextHop);
-    // Placeholder for pheromone update logic
+    
+    double bestDelay = trafficStat.GetBestDelayFromWindow();
+    double iInf = bestDelay;
+    double iSup = trafficStat.GetUpperBoundDelayFromWindow();
 
+    double reward = C1 * (bestDelay / (delayMillisecond + 1e-6)) + C2 * ((iSup - iInf) / ((iSup - iInf) + (delayMillisecond - iInf)));
 
-
-
-
+    for (auto& entry : m_pheromoneList) {
+        if (entry.first.first == nextHop) {
+            // Update pheromone for the chosen next hop
+            entry.second = entry.second + reward * (1 - entry.second);
+        } else {
+            // Evaporate pheromone for other next hops
+            entry.second = entry.second - reward * entry.second;
+        }
+    }
 }
 
 bool

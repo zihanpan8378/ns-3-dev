@@ -32,13 +32,13 @@ Ipv4AntNetLocalTrafficStatisticsEntry::ToString() const
     return oss.str();
 }
 
-void Ipv4AntNetLocalTrafficStatisticsEntry::UpdateStatistics(Time delay) {
-    double delayMs = delay.GetMilliSeconds();
+void Ipv4AntNetLocalTrafficStatisticsEntry::UpdateStatistics(double delayMs) {
     // Update mean delay using exponential moving average
-    m_meanDelay = m_meanDelay + MU * (delayMs - m_meanDelay);
+    m_meanDelay = m_meanDelay + ETA * (delayMs - m_meanDelay);
 
     // Update delay variance
-    m_delayVariance = m_delayVariance + MU * ((delayMs - m_meanDelay) * (delayMs - m_meanDelay) - m_delayVariance);
+    double delta = delayMs - m_meanDelay;
+    m_delayVariance = m_delayVariance + ETA * ((delta * delta) - m_delayVariance);
 
     // Update window delays
     if (m_delayWindow.size() >= MAX_WINDOW_SIZE) {
@@ -52,22 +52,27 @@ void Ipv4AntNetLocalTrafficStatisticsEntry::AddDataFlowMeasure() {
 }
 
 double Ipv4AntNetLocalTrafficStatisticsEntry::GetBestDelayFromWindow() const {
+    if (m_delayWindow.empty()) {
+        return m_meanDelay; // Fallback to mean delay if window is empty
+    }
+
     double bestDelay = std::numeric_limits<double>::max();
     for (const auto& delayMs : m_delayWindow) {
-        if (delayMs < bestDelay) {
-            bestDelay = delayMs;
-        }
+        bestDelay = std::min(bestDelay, delayMs);
     }
     return bestDelay;
 }
 
 double Ipv4AntNetLocalTrafficStatisticsEntry::GetUpperBoundDelayFromWindow() const {
-    // Placeholder for upper bound delay calculation
+    if (m_delayWindow.empty()) {
+        return m_meanDelay;
+    }
 
-
-
-    
-    return 0.0;
+    double sigma = std::sqrt(std::max(m_delayVariance, 0.0));
+    double windowSize = static_cast<double>(m_delayWindow.size());
+    return m_meanDelay + Z * (sigma / std::sqrt(windowSize));
 }
+
+
 
 } // namespace ns3

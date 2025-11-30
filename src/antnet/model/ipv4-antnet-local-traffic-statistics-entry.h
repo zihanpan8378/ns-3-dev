@@ -18,14 +18,16 @@ class Ipv4AntNetLocalTrafficStatisticsEntry
         Ipv4Address m_dest;
         Ipv4Mask m_destNetworkMask;
 
-        double m_dataFlowMeasure; // Measure of data flow (currently use sample count)
-        double m_meanDelay; // Mean delay to destination
-        double m_delayVariance; // Variance of delay to destination
-        std::list<double> m_delayWindow; // Sliding window of delays
+        double m_dataFlowMeasure;                                   // Measure of data flow (currently use sample count)
+        double m_meanDelay;                                         // Mean delay to destination
+        double m_delayVariance;                                     // Variance of delay to destination
+        std::list<double> m_delayWindow;                            // Sliding window of delays
 
-        static constexpr double MU = 0.005;
-        static constexpr double C = 0.3;
-        static constexpr double MAX_WINDOW_SIZE = 5 * (C / MU);
+        static constexpr double ETA = 0.005;                        // mean update rate
+        static constexpr double C = 0.3;                            // constant for window size calculation
+        static constexpr double Z = 1.70;                           // confidence coefficient
+        
+        static constexpr uint32_t MAX_WINDOW_SIZE = 5 * (C / ETA);    // Maximum size of the sliding window
 
     public:
         Ipv4AntNetLocalTrafficStatisticsEntry();
@@ -39,7 +41,7 @@ class Ipv4AntNetLocalTrafficStatisticsEntry
          * @brief Update statistics with a new delay measurement
          * @param delay The measured delay from current node to the destination m_dest
          */
-        void UpdateStatistics(Time delay);
+        void UpdateStatistics(double delayMs);
         /**
          * @brief Increment data flow measure when a data packet is sent to m_dest
          * For simplicity, we just increment by 1 for each data packet
@@ -70,6 +72,9 @@ class Ipv4AntNetLocalTrafficStatisticsEntry
          * @return The delay variance to the destination m_dest
          */
         double GetDelayVariance() const { return m_delayVariance; }
+
+        double GetStandardDeviation() const { return std::sqrt(std::max(m_delayVariance, 0.0)); }
+        int GetWindowSize() const { return m_delayWindow.size(); }
 
         /**
          * @return The best (minimum) delay from the sliding window with size MAX_WINDOW_SIZE

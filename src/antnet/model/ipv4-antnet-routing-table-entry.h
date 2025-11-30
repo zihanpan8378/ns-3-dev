@@ -6,6 +6,7 @@
 #include "ipv4-antnet-local-traffic-statistics-entry.h"
 
 #include <list>
+#include <map>
 #include <ostream>
 #include <vector>
 
@@ -20,6 +21,7 @@ class Ipv4AntNetRoutingTableEntry
     public:
         typedef std::pair<Ipv4Address, uint32_t> PheromoneKey; // Destination address and interface index
         typedef std::list<std::pair<PheromoneKey, double>> PheromoneList;
+        typedef std::map<PheromoneKey, bool> VisitedNextHopMap;
 
         /**
          * @brief This constructor does nothing
@@ -74,7 +76,7 @@ class Ipv4AntNetRoutingTableEntry
          * @brief Get the next hop with the highest pheromone value
          * @param oif requested output interface if any (put nullptr otherwise)
          */
-        PheromoneKey GetNextHop(Ptr<NetDevice> oif = nullptr) const;
+        PheromoneKey GetNextHop(std::map<Ipv4Address, double> queueLengthMap = std::map<Ipv4Address, double>(), Ptr<NetDevice> oif = nullptr) const;
         /**
          * @brief Get the next hop deterministically based on the given next hop address
          * @param nextHopAddr The address of the next hop
@@ -87,7 +89,7 @@ class Ipv4AntNetRoutingTableEntry
          * @param nextHop The address of the next hop the packet was sent to
          * @param trafficStat The local traffic statistics entry for this destination
          */
-        void UpdatePheromone(Ipv4Address dest, Ipv4Address nextHop, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const;
+        void UpdatePheromone(Ipv4Address nextHop, double delayMillisecond, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const;
         
 
         /**
@@ -131,7 +133,12 @@ class Ipv4AntNetRoutingTableEntry
     private:
         Ipv4Address m_dest;
         Ipv4Mask m_destNetworkMask;
-        PheromoneList m_pheromoneList;
+        mutable PheromoneList m_pheromoneList;
+        mutable VisitedNextHopMap m_visitedNextHops;
+
+        static constexpr double ALPHA = 0.3; // Probability correction coefficient
+        static constexpr double C1 = 0.7;    // Pheromone update constant 1
+        static constexpr double C2 = 0.3;    // Pheromone update constant 2
 };
 
 /**
