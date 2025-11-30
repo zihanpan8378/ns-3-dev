@@ -25,4 +25,5 @@ build_lib(
     ${libcore}
     ${libapplications}
     ${libwifi}
+    ${libpoint-to-point}
 )
