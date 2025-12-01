@@ -113,7 +113,7 @@ main(int argc, char* argv[])
 
     // Run Simulation
     NS_LOG_INFO("Run Simulation.");
-    Simulator::Stop(Seconds(150));
+    Simulator::Stop(Seconds(15));
     Simulator::Run();
 
     // Print Final Routing Tables

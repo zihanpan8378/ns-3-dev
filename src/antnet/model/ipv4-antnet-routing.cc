@@ -161,10 +161,21 @@ Ipv4AntNetRouting::RouteOutput(Ptr<Packet> p,
     Ipv4Address destination = header.GetDestination();
     // Lookup route for the destination
     Ptr<Ipv4Route> rtentry = LookupRoute(destination, oif);
-    // Set socket error based on route lookup result
-    sockerr = rtentry ? Socket::ERROR_NOTERROR : Socket::ERROR_NOROUTETOHOST;
 
-    return rtentry;
+    // Return the route if found
+    // If an output interface is specified, ensure the route uses it
+    if (rtentry) {
+        if (oif && rtentry->GetOutputDevice() != oif) {
+            sockerr = Socket::ERROR_NOROUTETOHOST;
+            NS_LOG_ERROR("RouteOutput: Output device from route does not match specified oif");
+            return 0;
+        }
+        sockerr = Socket::ERROR_NOTERROR;
+        return rtentry;
+    } else {
+        sockerr = Socket::ERROR_NOROUTETOHOST;
+        return 0;
+    }
 }
 
 bool
@@ -412,6 +423,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
     // Check for local delivery
     if (m_ipv4->IsDestinationAddress(header.GetDestination(), iif)) {
         if (!lcb.IsNull()) {
+            // Call local delivery callback to deliver the packet
             NS_LOG_LOGIC("Local delivery to " << header.GetDestination());
             lcb(p, header, iif);
             return true;
@@ -440,11 +452,18 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
     // Try find a route by calling LookupRoute and forward using ucb
     Ptr<Ipv4Route> route = LookupRoute(header.GetDestination());
     if (route) {
+        // Ensure we are not sending back out the input interface
+        uint32_t oif = route->GetOutputDevice()->GetIfIndex();
+        if (oif == iif) {
+            return false;
+        }
+
+        // Call unicast forward callback to send the packet
         NS_LOG_LOGIC("Found unicast destination- calling unicast callback");
         ucb(route, p, header);
         return true;
     } else {
-       NS_LOG_LOGIC("Did not find unicast destination- returning false");
+        NS_LOG_LOGIC("Did not find unicast destination, returning false");
         return false;
     }
 }
