@@ -540,25 +540,32 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
 
             // Get the interface that can reach this neighbour
             // Iterate through interfaces to find the matching one
-            uint32_t interfaceToNeighbour = 0;
+            uint32_t interfaceToNeighbour = std::numeric_limits<uint32_t>::max();
             for (uint32_t i = 0; i < m_ipv4->GetNInterfaces(); ++i) {
                 Ptr<NetDevice> device = m_ipv4->GetNetDevice(i);
-                if (device && device->IsPointToPoint()) {
-                    bool foundInterface = false;
-                    // Check if this interface's address matches the neighbour's subnet
-                    for (uint32_t j = 0; j < m_ipv4->GetNAddresses(i); ++j) {
-                        Ipv4Address ifaceAddr = m_ipv4->GetAddress(i, j).GetLocal();
-                        if (neighbourMask.IsMatch(ifaceAddr, neighbourAddr)) {
-                            interfaceToNeighbour = i;
-                            foundInterface = true;
-                            break;
-                        }
+                if (!device) {
+                    continue;
+                }
+                bool foundInterface = false;
+                // Check if this interface's address matches the neighbour's subnet
+                for (uint32_t j = 0; j < m_ipv4->GetNAddresses(i); ++j) {
+                    Ipv4Address ifaceAddr = m_ipv4->GetAddress(i, j).GetLocal();
+                    if (ifaceAddr == Ipv4Address::GetLoopback() || ifaceAddr == Ipv4Address("0.0.0.0")){
+                        continue;
                     }
-                    if (foundInterface) {
+                    if (neighbourMask.IsMatch(ifaceAddr, neighbourAddr)) {
+                        interfaceToNeighbour = i;
+                        foundInterface = true;
                         break;
                     }
                 }
+                if (foundInterface) {
+                    break;
+                }
             }
+
+            NS_ASSERT_MSG(interfaceToNeighbour != std::numeric_limits<uint32_t>::max(), "Could not find interface to neighbour " << neighbourAddr);
+
             // Add this neighbour to the pheromone list with initial pheromone value
             Ipv4AntNetRoutingTableEntry::PheromoneKey pheromoneKey = std::make_pair(neighbourAddr, interfaceToNeighbour);
             pheromoneList.push_back(std::make_pair(pheromoneKey, initialPheromone));

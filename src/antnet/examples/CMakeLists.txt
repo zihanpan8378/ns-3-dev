@@ -3,7 +3,6 @@ build_lib_example(
   SOURCE_FILES antnet-simple-example.cc
   LIBRARIES_TO_LINK
     ${libantnet}
-    ${libwifi}
     ${libinternet}
     ${libapplications}
     ${libpoint-to-point}
@@ -15,9 +14,21 @@ build_lib_example(
   SOURCE_FILES antnet-paper-example.cc
   LIBRARIES_TO_LINK
     ${libantnet}
+    ${libinternet}
+    ${libapplications}
+    ${libpoint-to-point}
+    ${libmobility}
+)
+
+build_lib_example(
+  NAME antnet-simple-wifi-example
+  SOURCE_FILES antnet-simple-wifi-example.cc
+  LIBRARIES_TO_LINK
+    ${libantnet}
     ${libwifi}
     ${libinternet}
     ${libapplications}
     ${libpoint-to-point}
     ${libmobility}
+    ${libcsma}
 )

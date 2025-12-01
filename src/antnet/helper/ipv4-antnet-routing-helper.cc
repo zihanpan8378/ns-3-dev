@@ -48,42 +48,61 @@ Ipv4AntNetRoutingHelper::BuildAntNetTopology()
     m_neighbourAdjList.clear();
     m_nodeList.clear();
 
+    // Set to store all destination addresses
     std::set<std::pair<Ipv4Address, Ipv4Address>> allDestAddrs;
 
+    // Iterate over all nodes to build destination list and neighbour list
     for (auto i = NodeList::Begin(); i != NodeList::End(); ++i) 
     {
+        // Current node
         Ptr<Node> node = *i;
 
+        // List to store neighbour addresses
+        // (first: IP address, second: subnet mask)
+        std::list<std::pair<Ipv4Address, Ipv4Address>> neighbourAddrs = {};
+
+        // List to store subnet DR addresses if the node is in a transit network
+        // (first: DR address, second: node address)
+        std::list<std::pair<Ipv4Address, Ipv4Address>> subnetDRAddrs = {};
+
+        // Cast to GlobalRouter
         Ptr<GlobalRouter> rtr = node->GetObject<GlobalRouter>();
         if (!rtr) {
             continue;
         }
 
+        // Discover LSAs for this router
         uint32_t numLSAs = rtr->DiscoverLSAs();
         NS_LOG_LOGIC("Found " << numLSAs << " LSAs for node " << node->GetId());
 
-        std::list<std::pair<Ipv4Address, Ipv4Address>> neighbourAddrs = {};
-
+        // Iterate over LSAs to extract link records
         for (uint32_t j = 0; j < numLSAs; ++j) {
+            // Get LSA
             GlobalRoutingLSA* lsa = new GlobalRoutingLSA();
             rtr->GetLSA(j, *lsa);
 
-            // For Router LSAs that are not originated by this router, skip them
+            lsa->Print(std::cout);
+
+            // For Router LSAs that are not originated by this router and other types of LSAs, skip them
             if (lsa->GetLSType () != GlobalRoutingLSA::RouterLSA || lsa->GetAdvertisingRouter () != rtr->GetRouterId ()) {
                 continue;
             }
 
+            // Iterate over link records in this LSA
             uint32_t nLinks = lsa->GetNLinkRecords ();
             for (uint32_t k = 0; k < nLinks; ++k) {
+                // Get link record
                 GlobalRoutingLinkRecord *lr = lsa->GetLinkRecord(k);
                 if (!lr) {
                     continue;
                 }
 
+                // If link is a Stub Network, add to allDestAddrs
                 if (lr->GetLinkType () == GlobalRoutingLinkRecord::StubNetwork) {
                     allDestAddrs.insert(std::make_pair(lr->GetLinkId(), lr->GetLinkData()));
                 }
 
+                // If link is PointToPoint, add neighbour address
                 if (lr->GetLinkType () == GlobalRoutingLinkRecord::PointToPoint) {
                     if (k + 1 < nLinks) {
                         GlobalRoutingLinkRecord *stub = lsa->GetLinkRecord (k + 1);
@@ -92,11 +111,56 @@ Ipv4AntNetRoutingHelper::BuildAntNetTopology()
                         }
                     }
                 }
+
+                // If link is Transit Network, add to allDestAddrs and store DR address for later neighbour discovery
+                if (lr->GetLinkType () == GlobalRoutingLinkRecord::TransitNetwork) {
+                    allDestAddrs.insert(std::make_pair(lr->GetLinkData(), Ipv4Address(Ipv4Mask::GetOnes().Get())));
+                    subnetDRAddrs.push_back(std::make_pair(lr->GetLinkId(), lr->GetLinkData()));
+                }
             }
         }
 
+        // For transit networks, find other routers connected to the same network via the DR
+        if (subnetDRAddrs.size() > 0) {
+            // Iterate over all nodes to find DRs
+            for (auto j = NodeList::Begin(); j != NodeList::End(); ++j) {
+                Ptr<Node> node2 = *j;
+                Ptr<GlobalRouter> rtr2 = node2->GetObject<GlobalRouter>();
+                uint32_t numLSAs = rtr2->DiscoverLSAs();
+                for (uint32_t k = 0; k < numLSAs; ++k) {
+                    GlobalRoutingLSA* lsa = new GlobalRoutingLSA();
+                    rtr2->GetLSA(k, *lsa);
+
+                    // Consider only Network LSAs
+                    if (lsa->GetLSType () != GlobalRoutingLSA::NetworkLSA) {
+                        continue;
+                    }
+
+                    // Check if this LSA corresponds to any of the subnets this node is connected to
+                    Ipv4Address netLsaId = lsa->GetLinkStateId();
+                    for (const auto &addrPair : subnetDRAddrs) {
+                        // Check if LSA Link State ID matches the DR address
+                        if (netLsaId == addrPair.first) {
+                            // Iterate over attached routers for this transit network to find neighbours
+                            uint32_t nAttached = lsa->GetNAttachedRouters();
+                            for (uint32_t l = 0; l < nAttached; ++l) {
+                                Ipv4Address attachedRtrAddr = lsa->GetAttachedRouter(l);
+                                // Skip the address of the current node
+                                if (attachedRtrAddr == addrPair.second) {
+                                    continue;
+                                }
+                                neighbourAddrs.push_back(std::make_pair(attachedRtrAddr, Ipv4Address(lsa->GetNetworkLSANetworkMask().Get())));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Store neighbour list for this node
         m_neighbourAdjList[node] = neighbourAddrs;
     }
+
+    // Convert set of all destination addresses to list
     for (const auto &addr : allDestAddrs) {
         m_nodeList.push_back(addr);
     }
