@@ -12,8 +12,9 @@
 #include "ns3/timestamp-tag.h"
 #include "ns3/ipv4-route.h"
 #include "ns3/nstime.h"
-#include "ns3/point-to-point-net-device.h"
 #include "ns3/queue.h"
+#include "ns3/traffic-control-layer.h"
+#include "ns3/queue-disc.h"
 
 #include <iomanip>
 #include <vector>
@@ -629,15 +630,18 @@ Ptr<Ipv4Route> Ipv4AntNetRouting::LookupRoute(Ipv4Address dest, Ptr<NetDevice> o
                     Ipv4Address neighborAddr = pheromonePair.first.first;
                     uint32_t neighborInterface = pheromonePair.first.second;
 
-                    Ptr<NetDevice> dev = m_ipv4->GetNetDevice(neighborInterface);
-                    Ptr<PointToPointNetDevice> p2p = DynamicCast<PointToPointNetDevice>(dev);
-                    uint32_t queueBytes = 0;
-
-                    if (p2p && p2p->GetQueue()) {
-                        queueBytes = p2p->GetQueue()->GetNBytes();
+                    // Get queue length on the interface to this neighbor
+                    Ptr<TrafficControlLayer> tc = m_ipv4->GetObject<Node>()->GetObject<TrafficControlLayer>();
+                    if (tc) {
+                        Ptr<QueueDisc> qd = tc->GetRootQueueDiscOnDevice(m_ipv4->GetNetDevice(neighborInterface));
+                        if (qd) {
+                            uint32_t queueBytes = qd->GetNBytes();
+                            queueLengthMap[neighborAddr] = static_cast<double>(queueBytes);
+                            continue;
+                        }
+                    } else {
+                        NS_LOG_ERROR("TrafficControlLayer not found on node " << m_ipv4->GetObject<Node>()->GetId());
                     }
-
-                    queueLengthMap[neighborAddr] = static_cast<double>(queueBytes);
                 }
                 nextHop = entry.GetNextHop(queueLengthMap);
             }
