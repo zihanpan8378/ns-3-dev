@@ -58,7 +58,8 @@ Ipv4AntNetRouting::GetTypeId()
 
 Ipv4AntNetRouting::Ipv4AntNetRouting()
     : m_ipv4(nullptr),
-      m_roundNumber(0)
+      m_roundNumber(0),
+      m_beaconSentCount(0)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -160,6 +161,17 @@ Ipv4AntNetRouting::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit
         *stream->GetStream() << "        " << entry.ToString();
     }
     *stream->GetStream() << "        --------------------------------------------------------" << std::endl;
+
+    if (m_useBeaconWindow) {
+        *stream->GetStream() << "    Received Beacons Count:" << std::endl;
+        *stream->GetStream() << "        --------------------------------------------------------" << std::endl;
+        *stream->GetStream() << "        Beacon sent: " << m_beaconSentCount << std::endl;
+        for (const auto& entry : m_receivedBeaconsCountMap) {
+            *stream->GetStream() << "        " << entry.first << " : " << entry.second << "" << std::endl;
+        }
+        *stream->GetStream() << "        --------------------------------------------------------" << std::endl;
+    }
+    
     *stream->GetStream() << std::endl;
 }
 
@@ -429,6 +441,12 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
         } else if (antType == AntHeader::Type::BEACON_ANT) {
             NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Process beacon ant. Ant: " << antHeader.ToString());
 
+            // Update received beacon count for neighbour
+            m_receivedBeaconsCountMap[header.GetSource()] += 1;
+
+            for (const auto entry : m_receivedBeaconsCountMap) {
+                NS_LOG_INFO("    Received beacon count from neighbour " << entry.first << " : " << entry.second);
+            }
             return true;
         } else {
             NS_LOG_ERROR("Unknown Ant type");
@@ -537,6 +555,47 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
     // Initial pheromone value, equally distributed among neighbours
     double initialPheromone = 1.0 / neighbourList.size();
 
+    // Prepare pheromone list from neighbours
+    Ipv4AntNetRoutingTableEntry::PheromoneList pheromoneList;
+    for (const auto& neighbourAddrAndMask : neighbourList) {
+        Ipv4Address neighbourAddr = neighbourAddrAndMask.first;
+        Ipv4Mask neighbourMask = Ipv4Mask(neighbourAddrAndMask.second.Get());
+
+        // Get the interface that can reach this neighbour
+        // Iterate through interfaces to find the matching one
+        uint32_t interfaceToNeighbour = std::numeric_limits<uint32_t>::max();
+        for (uint32_t i = 0; i < m_ipv4->GetNInterfaces(); ++i) {
+            Ptr<NetDevice> device = m_ipv4->GetNetDevice(i);
+            if (!device) {
+                continue;
+            }
+            bool foundInterface = false;
+            // Check if this interface's address matches the neighbour's subnet
+            for (uint32_t j = 0; j < m_ipv4->GetNAddresses(i); ++j) {
+                Ipv4Address ifaceAddr = m_ipv4->GetAddress(i, j).GetLocal();
+                if (ifaceAddr == Ipv4Address::GetLoopback() || ifaceAddr == Ipv4Address("0.0.0.0")){
+                    continue;
+                }
+                if (neighbourMask.IsMatch(ifaceAddr, neighbourAddr)) {
+                    interfaceToNeighbour = i;
+                    foundInterface = true;
+                    break;
+                }
+            }
+            if (foundInterface) {
+                break;
+            }
+        }
+        NS_ASSERT_MSG(interfaceToNeighbour != std::numeric_limits<uint32_t>::max(), "Could not find interface to neighbour " << neighbourAddr);
+
+        // Map neighbour address to interface
+        m_neighbourInterfaceMap[neighbourAddr] = interfaceToNeighbour;
+
+        // Add this neighbour to the pheromone list with initial pheromone value
+        Ipv4AntNetRoutingTableEntry::PheromoneKey pheromoneKey = std::make_pair(neighbourAddr, interfaceToNeighbour);
+        pheromoneList.push_back(std::make_pair(pheromoneKey, initialPheromone));
+    }
+
     // Initialize routing table entries
     for (const auto& destAddrAndMask : destList) {
         // Check if destination address is one of the node's own addresses, skip if so
@@ -551,56 +610,29 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
         Ipv4AntNetLocalTrafficStatisticsEntry trafficEntry(destAddr, destMask);
         m_localTrafficStatsTable.push_back(trafficEntry);
 
-        // Prepare pheromone list for this destination
-        Ipv4AntNetRoutingTableEntry::PheromoneList pheromoneList;
-        for (const auto& neighbourAddrAndMask : neighbourList) {
-            Ipv4Address neighbourAddr = neighbourAddrAndMask.first;
-            Ipv4Mask neighbourMask = Ipv4Mask(neighbourAddrAndMask.second.Get());
+        // Make a copy of pheromoneList for this destination
+        Ipv4AntNetRoutingTableEntry::PheromoneList pheromoneListCopy = pheromoneList;
 
-            // Get the interface that can reach this neighbour
-            // Iterate through interfaces to find the matching one
-            uint32_t interfaceToNeighbour = std::numeric_limits<uint32_t>::max();
-            for (uint32_t i = 0; i < m_ipv4->GetNInterfaces(); ++i) {
-                Ptr<NetDevice> device = m_ipv4->GetNetDevice(i);
-                if (!device) {
-                    continue;
-                }
-                bool foundInterface = false;
-                // Check if this interface's address matches the neighbour's subnet
-                for (uint32_t j = 0; j < m_ipv4->GetNAddresses(i); ++j) {
-                    Ipv4Address ifaceAddr = m_ipv4->GetAddress(i, j).GetLocal();
-                    if (ifaceAddr == Ipv4Address::GetLoopback() || ifaceAddr == Ipv4Address("0.0.0.0")){
-                        continue;
-                    }
-                    if (neighbourMask.IsMatch(ifaceAddr, neighbourAddr)) {
-                        interfaceToNeighbour = i;
-                        foundInterface = true;
-                        break;
-                    }
-                }
-                if (foundInterface) {
-                    break;
-                }
-            }
-
-            NS_ASSERT_MSG(interfaceToNeighbour != std::numeric_limits<uint32_t>::max(), "Could not find interface to neighbour " << neighbourAddr);
-
-            // Add this neighbour to the pheromone list with initial pheromone value
-            Ipv4AntNetRoutingTableEntry::PheromoneKey pheromoneKey = std::make_pair(neighbourAddr, interfaceToNeighbour);
-            pheromoneList.push_back(std::make_pair(pheromoneKey, initialPheromone));
-        }
         // Create routing table entry and add to routing table
-        Ipv4AntNetRoutingTableEntry newEntry(destAddr, destMask, pheromoneList);
+        Ipv4AntNetRoutingTableEntry newEntry(destAddr, destMask, pheromoneListCopy);
         m_routingTable.push_back(newEntry);
     }
 
+    // Schedule the first forward ant event
     m_forwardAntEvent = Simulator::Schedule(
         m_forwardAntInterval,
         &Ipv4AntNetRouting::ScheduleForwardAnt,
         this
     );
 
+    // Initialize beacon mechanism if enabled
     if (m_useBeaconWindow) {
+        // Initialize received beacons count map
+        for (const auto& neighbour : m_neighbourInterfaceMap) {
+            Ipv4Address neighbourAddr = neighbour.first;
+            m_receivedBeaconsCountMap[neighbourAddr] = 0;
+        }
+
         // Initialize beacon window for neighbour failure detection
         m_beaconEvent = Simulator::Schedule(
             m_beaconInterval,
@@ -609,6 +641,7 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
         );
     }
 
+    // Initialize failure message propagation mechanism if enabled (not implemented yet)
     if (m_useFailureMessagePropagation) {
 
     }
@@ -655,31 +688,33 @@ void Ipv4AntNetRouting::SendBeacon() {
         return;
     }
 
-    // Get the first entry from the routing table to determine valid neighbours
-    const Ipv4AntNetRoutingTableEntry& firstEntry = m_routingTable.front();
-    Ipv4AntNetRoutingTableEntry::PheromoneList pheromoneList = firstEntry.GetPheromoneList();
-
-    for (const auto& pheromonePair : pheromoneList) {
-        Ipv4AntNetRoutingTableEntry::PheromoneKey neighbourKey = pheromonePair.first;
-        Ipv4Address neighbourAddr = neighbourKey.first;
-        uint32_t neighbourInterface = neighbourKey.second;
+    // Iterate through all neighbours to send beacon
+    for (const auto& neighbour : m_neighbourInterfaceMap) {
+        Ipv4Address neighbourAddr = neighbour.first;
 
         // Create a beacon packet
         Ptr<Packet> beaconPacket = Create<Packet>();
 
+        // Look up route to neighbour
+        Ptr<Ipv4Route> route = LookupRoute(neighbourAddr, nullptr, true);
+
         // Create and init AntHeader for beacon
         AntHeader antHeader(
-            AntHeader::Type::BEACON_ANT, 
-            m_ipv4->GetObject<Node>()->GetId(),
-            m_ipv4->GetAddress(neighbourInterface, 0).GetLocal(),
-            neighbourAddr,
-            0 // Round number not used for beacon
+            AntHeader::Type::BEACON_ANT,                                                // Ant type
+            m_ipv4->GetObject<Node>()->GetId(),                                         // Source node ID
+            m_ipv4->GetAddress(route->GetOutputDevice()->GetIfIndex(), 0).GetLocal(),   // Source address
+            neighbourAddr,                                                              // Destination address is neighbour
+            0                                                                           // Round number not used for beacon
         );
-
         beaconPacket->AddHeader(antHeader);
+
+        // Send the beacon packet
         NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send beacon to neighbour " << neighbourAddr << ". Ant: " << antHeader.ToString());
-        m_ipv4->Send(beaconPacket, m_ipv4->GetAddress(neighbourInterface, 0).GetLocal(), neighbourAddr, PROTOCOL_ANTNET, nullptr);
+        m_ipv4->Send(beaconPacket, route->GetSource(), neighbourAddr, PROTOCOL_ANTNET, route);
     }
+
+    // Increment beacon sent count
+    m_beaconSentCount++;
 
     // Reschedule the next beacon sending event
     m_beaconEvent = Simulator::Schedule(

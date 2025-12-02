@@ -133,6 +133,8 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         EventId m_forwardAntEvent;
         // Current round number for forward ants
         uint32_t m_roundNumber;
+        // Map of neighbour address to interface index
+        std::map<Ipv4Address, uint32_t> m_neighbourInterfaceMap;
 
         // Whether to use beacon window to detect neighbour failures
         bool m_useBeaconWindow;
@@ -140,7 +142,12 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         Time m_beaconInterval;
         // Event ID for scheduled beacon sending
         EventId m_beaconEvent;
-
+        // Count of beacons sent
+        uint32_t m_beaconSentCount;
+        // Map of neighbour address to count of received beacons
+        // The key is a pair of neighbour address and interface index
+        // The value is the count of received beacons from that neighbour
+        std::map<Ipv4Address, uint32_t> m_receivedBeaconsCountMap;
 
         // Whether to use failure message propagation mechanism
         bool m_useFailureMessagePropagation;
