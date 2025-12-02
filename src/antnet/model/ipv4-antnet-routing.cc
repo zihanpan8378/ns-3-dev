@@ -37,7 +37,22 @@ Ipv4AntNetRouting::GetTypeId()
                           "Interval between sending forward ants from this node.",
                           TimeValue(Seconds(5)),
                           MakeTimeAccessor(&Ipv4AntNetRouting::m_forwardAntInterval),
-                          MakeTimeChecker());
+                          MakeTimeChecker())
+            .AddAttribute("BeaconInterval",
+                          "Interval between sending beacon ants from this node.",
+                          TimeValue(Seconds(1)),
+                          MakeTimeAccessor(&Ipv4AntNetRouting::m_beaconInterval),
+                          MakeTimeChecker())
+            .AddAttribute("UseBeaconWindow",
+                          "Whether to use beacon window for local traffic statistics.",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&Ipv4AntNetRouting::m_useBeaconWindow),
+                          MakeBooleanChecker())
+            .AddAttribute("UseFailureMessagePropagation",
+                          "Whether to use failure message propagation mechanism.",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&Ipv4AntNetRouting::m_useFailureMessagePropagation),
+                          MakeBooleanChecker());
     return tid;
 }
 
@@ -411,6 +426,10 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                 NS_LOG_ERROR("No route found for backward ant to " << nextBackwardHopAddr);
                 return false;
             }
+        } else if (antType == AntHeader::Type::BEACON_ANT) {
+            NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Process beacon ant. Ant: " << antHeader.ToString());
+
+            return true;
         } else {
             NS_LOG_ERROR("Unknown Ant type");
             return false;
@@ -580,6 +599,19 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
         &Ipv4AntNetRouting::ScheduleForwardAnt,
         this
     );
+
+    if (m_useBeaconWindow) {
+        // Initialize beacon window for neighbour failure detection
+        m_beaconEvent = Simulator::Schedule(
+            m_beaconInterval,
+            &Ipv4AntNetRouting::SendBeacon,
+            this
+        );
+    }
+
+    if (m_useFailureMessagePropagation) {
+
+    }
 }
 
 void Ipv4AntNetRouting::SendForwardAnt(Ipv4Address dest) {
@@ -613,6 +645,48 @@ void Ipv4AntNetRouting::SendForwardAnt(Ipv4Address dest) {
     // Call Ipv4 L3 protocol's Send method to send the packet
     m_ipv4->Send(p, source, dest, PROTOCOL_ANTNET, route);
     m_roundNumber++;
+}
+
+void Ipv4AntNetRouting::SendBeacon() {
+    NS_LOG_FUNCTION(this);
+
+    if (m_routingTable.empty()) {
+        NS_LOG_LOGIC("Routing table is empty, don't need to send beacon");
+        return;
+    }
+
+    // Get the first entry from the routing table to determine valid neighbours
+    const Ipv4AntNetRoutingTableEntry& firstEntry = m_routingTable.front();
+    Ipv4AntNetRoutingTableEntry::PheromoneList pheromoneList = firstEntry.GetPheromoneList();
+
+    for (const auto& pheromonePair : pheromoneList) {
+        Ipv4AntNetRoutingTableEntry::PheromoneKey neighbourKey = pheromonePair.first;
+        Ipv4Address neighbourAddr = neighbourKey.first;
+        uint32_t neighbourInterface = neighbourKey.second;
+
+        // Create a beacon packet
+        Ptr<Packet> beaconPacket = Create<Packet>();
+
+        // Create and init AntHeader for beacon
+        AntHeader antHeader(
+            AntHeader::Type::BEACON_ANT, 
+            m_ipv4->GetObject<Node>()->GetId(),
+            m_ipv4->GetAddress(neighbourInterface, 0).GetLocal(),
+            neighbourAddr,
+            0 // Round number not used for beacon
+        );
+
+        beaconPacket->AddHeader(antHeader);
+        NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send beacon to neighbour " << neighbourAddr << ". Ant: " << antHeader.ToString());
+        m_ipv4->Send(beaconPacket, m_ipv4->GetAddress(neighbourInterface, 0).GetLocal(), neighbourAddr, PROTOCOL_ANTNET, nullptr);
+    }
+
+    // Reschedule the next beacon sending event
+    m_beaconEvent = Simulator::Schedule(
+        m_beaconInterval,
+        &Ipv4AntNetRouting::SendBeacon,
+        this
+    );
 }
 
 Ptr<Ipv4Route> Ipv4AntNetRouting::LookupRoute(Ipv4Address dest, Ptr<NetDevice> oif, bool backwardAntLookup) const {

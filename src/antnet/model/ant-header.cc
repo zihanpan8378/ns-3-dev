@@ -208,7 +208,17 @@ AntHeader::Deserialize(Buffer::Iterator start)
 void
 AntHeader::Print(std::ostream& os) const
 {
-    os << "AntHeader[type=" << (m_type == FORWARD_ANT ? "FORWARD_ANT" : "BACKWARD_ANT") << ", ";
+    AntHeader::Type type = m_type;
+    if (type == FORWARD_ANT) {
+        os << "AntHeader[type=FORWARD_ANT, ";
+    } else if (type == BACKWARD_ANT) {
+        os << "AntHeader[type=BACKWARD_ANT, ";
+    } else if (type == BEACON_ANT) {
+        os << "AntHeader[type=BEACON_ANT, ";
+    } else {
+        os << "AntHeader[type=UNKNOWN, ";
+    }
+    
     os << "sourceNodeId=" << m_sourceNodeId << ", ";
     os << "sourceAddress=" << m_sourceAddress << ", ";
     os << "destinationAddress=" << m_destinationAddress << ", ";

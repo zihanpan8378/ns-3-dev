@@ -63,12 +63,6 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
                                Time::Unit unit = Time::S) const override;
 
         /**
-         * @brief Send a forward ant. The destination will be chosen based on local traffic statistics.
-         * This will be called periodically to send forward ants (don't know how to call this yet)
-         */
-        void ScheduleForwardAnt();
-
-        /**
          * @brief Initialize the routing table with the given list of possible destinations and their neighbours
          * Initial pheromone values will be set equally for all neighbours
          * @param destList List of all possible destination addresses and masks in the network
@@ -80,11 +74,24 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         );
 
     private:
+
+        /**
+         * @brief Send a forward ant. The destination will be chosen based on local traffic statistics.
+         * This will be called periodically to send forward ants (don't know how to call this yet)
+         */
+        void ScheduleForwardAnt();
+
         /**
          * @brief Send a forward ant to the specified destination
          * @param dest The destination address
          */
         void SendForwardAnt(Ipv4Address dest);
+
+        /**
+         * @brief Send beacon ants to all neighbours periodically
+         * The period is defined by m_beaconInterval
+         */
+        void SendBeacon();
 
         /**
          * @brief Lookup a route in the routing table for the given destination and output interface (if any)
@@ -126,6 +133,17 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         EventId m_forwardAntEvent;
         // Current round number for forward ants
         uint32_t m_roundNumber;
+
+        // Whether to use beacon window to detect neighbour failures
+        bool m_useBeaconWindow;
+        // Beacon interval for sending beacons to neighbours
+        Time m_beaconInterval;
+        // Event ID for scheduled beacon sending
+        EventId m_beaconEvent;
+
+
+        // Whether to use failure message propagation mechanism
+        bool m_useFailureMessagePropagation;
 };
 
 } // Namespace ns3
