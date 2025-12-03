@@ -72,55 +72,21 @@ Ipv4AntNetRouting::~Ipv4AntNetRouting()
 void 
 Ipv4AntNetRouting::NotifyInterfaceUp(uint32_t interface) {
     NS_LOG_FUNCTION(this << interface);
-    // for (uint32_t j = 0; j < m_ipv4->GetNAddresses(interface); ++j) {
-    //     Ipv4Address addr = m_ipv4->GetAddress(interface, j).GetLocal();
-    //     Ipv4Mask mask = m_ipv4->GetAddress(interface, j).GetMask();
-
-    //     if (addr != Ipv4Address() && mask != Ipv4Mask() && mask != Ipv4Mask::GetOnes()) {
-    //         Ipv4AntNetRoutingTableEntry* routeEntry = FindRoutingTableEntry(addr);
-    //         if (routeEntry) {
-    //             NS_LOG_LOGIC("Interface " << interface << " address " << addr << " already in routing table");
-    //             continue;
-    //         } else {
-    //             NS_LOG_LOGIC("Adding interface " << interface << " address " << addr << " to routing table");
-    //             Ipv4AntNetRoutingTableEntry newEntry(
-    //                 addr.CombineMask(mask),
-    //                 mask,
-    //                 Ipv4AntNetRoutingTableEntry::PheromoneList()
-    //             );
-    //             m_routingTable.push_back(newEntry);
-    //         }
-    //     }
-
-    //     NS_LOG_LOGIC("Interface " << interface << " is up with address " << addr);
-    // }
 }
 
 void 
 Ipv4AntNetRouting::NotifyInterfaceDown(uint32_t interface) {
     NS_LOG_FUNCTION(this << interface);
-    
-
-
-
 }
 
 void 
 Ipv4AntNetRouting::NotifyAddAddress(uint32_t interface, Ipv4InterfaceAddress address) {
     NS_LOG_FUNCTION(this << interface << " " << address.GetLocal());
-
-
-
-
 }
 
 void
 Ipv4AntNetRouting::NotifyRemoveAddress(uint32_t interface, Ipv4InterfaceAddress address) {
     NS_LOG_FUNCTION(this << interface << " " << address.GetLocal());
-
-
-
-
 }
 
 void
