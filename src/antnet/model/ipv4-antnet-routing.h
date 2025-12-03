@@ -69,12 +69,6 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
                                 LocalTrafficStatisticsTable testLocalTrafficStatsTable);
 
         /**
-         * @brief Send a forward ant. The destination will be chosen based on local traffic statistics.
-         * This will be called periodically to send forward ants (don't know how to call this yet)
-         */
-        void ScheduleForwardAnt();
-
-        /**
          * @brief Initialize the routing table with the given list of possible destinations and their neighbours
          * Initial pheromone values will be set equally for all neighbours
          * @param destList List of all possible destination addresses and masks in the network
@@ -86,11 +80,24 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         );
 
     private:
+
+        /**
+         * @brief Send a forward ant. The destination will be chosen based on local traffic statistics.
+         * This will be called periodically to send forward ants (don't know how to call this yet)
+         */
+        void ScheduleForwardAnt();
+
         /**
          * @brief Send a forward ant to the specified destination
          * @param dest The destination address
          */
         void SendForwardAnt(Ipv4Address dest);
+
+        /**
+         * @brief Send beacon ants to all neighbours periodically
+         * The period is defined by m_beaconInterval
+         */
+        void SendBeacon();
 
         /**
          * @brief Lookup a route in the routing table for the given destination and output interface (if any)
@@ -128,6 +135,35 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         EventId m_forwardAntEvent;
         // Current round number for forward ants
         uint32_t m_roundNumber;
+        // Map of neighbour address to interface index
+        std::map<Ipv4Address, uint32_t> m_neighbourInterfaceMap;
+
+        // Variables for beacon mechanism
+        // Whether to use beacon window to detect neighbour failures
+        bool m_useBeaconWindow;
+        // Beacon interval for sending beacons to neighbours
+        Time m_beaconInterval;
+        // Event ID for scheduled beacon sending
+        EventId m_beaconEvent;
+        // Count of beacons sent
+        uint32_t m_beaconSentCount;
+        // Map of neighbour address to count of received beacons
+        // The key is neighbour address
+        // The value is the count of received beacons from that neighbour at the current round
+        std::map<Ipv4Address, uint32_t> m_receivedBeaconsCountMap;
+        // Size of the sliding window for received beacons
+        uint32_t m_beaconWindowSize;
+        // Map of neighbour address to sliding window of received beacon counts
+        // The key is neighbour address
+        // The value is a list of counts of received beacons from that neighbour in the past rounds
+        // Each list has size at most m_beaconWindowSize
+        std::map<Ipv4Address, std::list<uint32_t>> m_receivedBeaconsCountWindowMap;
+        // A constant factor for calculation evaporation factor
+        static constexpr double D = 1.35;
+
+        // Variables for failure message propagation mechanism
+        // Whether to use failure message propagation mechanism
+        bool m_useFailureMessagePropagation;
 };
 
 } // Namespace ns3

@@ -192,7 +192,7 @@ Ipv4AntNetRoutingTableEntry::GetDeterministicNextHop(Ipv4Address nextHopAddr) co
 }
 
 void 
-Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address nextHop, double delayMillisecond, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const
+Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address nextHop, double delayMillisecond, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat)
 {
     NS_LOG_FUNCTION(this << nextHop);
     
@@ -210,6 +210,30 @@ Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address nextHop, double delayMi
             // Evaporate pheromone for other next hops
             entry.second = entry.second - reward * entry.second;
         }
+    }
+}
+
+void 
+Ipv4AntNetRoutingTableEntry::EvaporatePheromone(Ipv4Address nextHop, double evaporationFactor)
+{
+    NS_LOG_FUNCTION(this << nextHop);
+
+    NS_ASSERT(evaporationFactor > 0.0 && evaporationFactor < 1.0);
+
+    // Evaporate pheromone for the given next hop address
+    for (auto& entry : m_pheromoneList) {
+        if (entry.first.first == nextHop) {
+            entry.second *= evaporationFactor;
+        }
+    }
+
+    // Normalize pheromone values to sum to 1
+    double totalPheromone = 0.0;
+    for (const auto& entry : m_pheromoneList) {
+        totalPheromone += entry.second;
+    }
+    for (auto& entry : m_pheromoneList) {
+        entry.second /= totalPheromone;
     }
 }
 

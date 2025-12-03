@@ -15,7 +15,8 @@ class AntHeader : public Header
         enum Type
         {
             FORWARD_ANT = 0,
-            BACKWARD_ANT = 1
+            BACKWARD_ANT = 1,
+            BEACON_ANT = 2
         };
 
         /**

@@ -91,7 +91,14 @@ class Ipv4AntNetRoutingTableEntry
          * @param delayMillisecond The delay experienced to reach the destination in milliseconds
          * @param trafficStat The local traffic statistics entry for this destination
          */
-        void UpdatePheromone(Ipv4Address nextHop, double delayMillisecond, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat) const;
+        void UpdatePheromone(Ipv4Address nextHop, double delayMillisecond, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat);
+
+        /**
+         * @brief Evaporate pheromone values for the given next hop address.
+         * @param nextHop The address of the next hop
+         * @param evaporationFactor The evaporation factor (between D - 1 and 1), where D is 1.35
+         */
+        void EvaporatePheromone(Ipv4Address nextHop, double evaporationFactor);
         
 
         /**
