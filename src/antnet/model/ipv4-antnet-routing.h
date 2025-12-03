@@ -136,6 +136,7 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         // Map of neighbour address to interface index
         std::map<Ipv4Address, uint32_t> m_neighbourInterfaceMap;
 
+        // Variables for beacon mechanism
         // Whether to use beacon window to detect neighbour failures
         bool m_useBeaconWindow;
         // Beacon interval for sending beacons to neighbours
@@ -145,10 +146,20 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         // Count of beacons sent
         uint32_t m_beaconSentCount;
         // Map of neighbour address to count of received beacons
-        // The key is a pair of neighbour address and interface index
-        // The value is the count of received beacons from that neighbour
+        // The key is neighbour address
+        // The value is the count of received beacons from that neighbour at the current round
         std::map<Ipv4Address, uint32_t> m_receivedBeaconsCountMap;
+        // Size of the sliding window for received beacons
+        uint32_t m_beaconWindowSize;
+        // Map of neighbour address to sliding window of received beacon counts
+        // The key is neighbour address
+        // The value is a list of counts of received beacons from that neighbour in the past rounds
+        // Each list has size at most m_beaconWindowSize
+        std::map<Ipv4Address, std::list<uint32_t>> m_receivedBeaconsCountWindowMap;
+        // A constant factor for calculation evaporation factor
+        static constexpr double D = 1.35;
 
+        // Variables for failure message propagation mechanism
         // Whether to use failure message propagation mechanism
         bool m_useFailureMessagePropagation;
 };

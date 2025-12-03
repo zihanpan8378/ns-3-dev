@@ -53,6 +53,7 @@ main(int argc, char* argv[])
     std::srand(538);
 
     // Enable logging
+    LogComponentEnableAll(LOG_PREFIX_TIME);
     LogComponentEnable("SimpleAntNetExample", LOG_LEVEL_INFO);
     LogComponentEnable("Ipv4AntNetRoutingHelper", LOG_LEVEL_INFO);
     LogComponentEnable("Ipv4AntNetRouting", LOG_LEVEL_INFO);
@@ -62,8 +63,8 @@ main(int argc, char* argv[])
     Config::SetDefault("ns3::OnOffApplication::PacketSize", UintegerValue(210));
     Config::SetDefault("ns3::OnOffApplication::DataRate", StringValue("448kb/s"));
     Config::SetDefault("ns3::Ipv4AntNetRouting::ForwardAntInterval", TimeValue(Seconds(10)));
-    Config::SetDefault("ns3::Ipv4AntNetRouting::BeaconInterval", TimeValue(Seconds(6)));
-    Config::SetDefault("ns3::Ipv4AntNetRouting::UseBeaconWindow", BooleanValue(false));
+    Config::SetDefault("ns3::Ipv4AntNetRouting::BeaconWindowSize", UintegerValue(10));
+    Config::SetDefault("ns3::Ipv4AntNetRouting::UseBeaconWindow", BooleanValue(true));
     Config::SetDefault("ns3::Ipv4AntNetRouting::UseFailureMessagePropagation", BooleanValue(false));
 
     CommandLine cmd(__FILE__);
@@ -122,11 +123,11 @@ main(int argc, char* argv[])
     // Break node R0 at 12 seconds and recover it at 22 seconds
     Ptr<Node> n0 = c.Get(0);
     Simulator::Schedule(Seconds(12.0), &FailNode, n0);
-    Simulator::Schedule(Seconds(22.0), &RecoverNode, n0);
+    Simulator::Schedule(Seconds(74.0), &RecoverNode, n0);
 
     // Run Simulation
     NS_LOG_INFO("Run Simulation.");
-    Simulator::Stop(Seconds(35));
+    Simulator::Stop(Seconds(81));
     Simulator::Run();
 
     // Print Final Routing Tables

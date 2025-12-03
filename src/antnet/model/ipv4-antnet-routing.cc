@@ -38,11 +38,11 @@ Ipv4AntNetRouting::GetTypeId()
                           TimeValue(Seconds(5)),
                           MakeTimeAccessor(&Ipv4AntNetRouting::m_forwardAntInterval),
                           MakeTimeChecker())
-            .AddAttribute("BeaconInterval",
-                          "Interval between sending beacon ants from this node.",
-                          TimeValue(Seconds(1)),
-                          MakeTimeAccessor(&Ipv4AntNetRouting::m_beaconInterval),
-                          MakeTimeChecker())
+            .AddAttribute("BeaconWindowSize",
+                          "Window size of beacon detection.",
+                          UintegerValue(10),
+                          MakeUintegerAccessor(&Ipv4AntNetRouting::m_beaconWindowSize),
+                          MakeUintegerChecker<uint32_t>())
             .AddAttribute("UseBeaconWindow",
                           "Whether to use beacon window for local traffic statistics.",
                           BooleanValue(false),
@@ -132,8 +132,14 @@ Ipv4AntNetRouting::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit
         *stream->GetStream() << "    Received Beacons Count:" << std::endl;
         *stream->GetStream() << "        --------------------------------------------------------" << std::endl;
         *stream->GetStream() << "        Beacon sent: " << m_beaconSentCount << std::endl;
-        for (const auto& entry : m_receivedBeaconsCountMap) {
-            *stream->GetStream() << "        " << entry.first << " : " << entry.second << "" << std::endl;
+        for (const auto& [address, count] : m_receivedBeaconsCountMap) {
+            auto it = m_receivedBeaconsCountWindowMap.find(address);
+            std::list<uint32_t> beaconWindow = (it != m_receivedBeaconsCountWindowMap.end()) ? it->second : std::list<uint32_t>();
+            *stream->GetStream() << "        " << address << " : [";
+            for (auto i : beaconWindow) {
+                *stream->GetStream() << i << ", ";
+            }
+            *stream->GetStream() << "] : " << count << "" << std::endl;
         }
         *stream->GetStream() << "        --------------------------------------------------------" << std::endl;
     }
@@ -410,9 +416,6 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             // Update received beacon count for neighbour
             m_receivedBeaconsCountMap[header.GetSource()] += 1;
 
-            for (const auto entry : m_receivedBeaconsCountMap) {
-                NS_LOG_INFO("    Received beacon count from neighbour " << entry.first << " : " << entry.second);
-            }
             return true;
         } else {
             NS_LOG_ERROR("Unknown Ant type");
@@ -502,6 +505,10 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
     const std::list<std::pair<Ipv4Address, Ipv4Address>>& destList, 
     const std::list<std::pair<Ipv4Address, Ipv4Address>>& neighbourList) {
     NS_LOG_FUNCTION(this);
+
+    // Set default beacon interval as half of forward ant interval
+    // Send beacons more frequently than forward ants
+    m_beaconInterval = Seconds(m_forwardAntInterval.GetSeconds() / 2.0); 
 
     // Clear existing routing table and local traffic statistics table
     m_routingTable.clear();
@@ -670,13 +677,52 @@ void Ipv4AntNetRouting::SendBeacon() {
             m_ipv4->GetObject<Node>()->GetId(),                                         // Source node ID
             m_ipv4->GetAddress(route->GetOutputDevice()->GetIfIndex(), 0).GetLocal(),   // Source address
             neighbourAddr,                                                              // Destination address is neighbour
-            0                                                                           // Round number not used for beacon
+            m_roundNumber                                                               // Round number
         );
         beaconPacket->AddHeader(antHeader);
 
         // Send the beacon packet
         NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send beacon to neighbour " << neighbourAddr << ". Ant: " << antHeader.ToString());
         m_ipv4->Send(beaconPacket, route->GetSource(), neighbourAddr, PROTOCOL_ANTNET, route);
+    }
+
+    // Process received beacon count window for evaporation
+    for (const auto& [neighbourAddr, beaconCount] : m_receivedBeaconsCountMap) {
+        // Update beacon count window and reset count for next interval
+        m_receivedBeaconsCountWindowMap[neighbourAddr].push_back(beaconCount);
+        m_receivedBeaconsCountMap[neighbourAddr] = 0;
+        
+        // Skip evaporation if not enough data in window
+        if (m_receivedBeaconsCountWindowMap[neighbourAddr].size() < m_beaconWindowSize) {
+            continue;
+        }
+
+        // Move window if exceeded size
+        if (m_receivedBeaconsCountWindowMap[neighbourAddr].size() > m_beaconWindowSize) {
+            m_receivedBeaconsCountWindowMap[neighbourAddr].pop_front();
+        }
+
+        // Calculate evaporation factor based on consecutive identical beacon counts at the beginning of the window
+        uint32_t q = 0;
+        for (const auto windowEntry : m_receivedBeaconsCountWindowMap[neighbourAddr]) {
+            if (windowEntry == m_receivedBeaconsCountWindowMap[neighbourAddr].front()) {
+                q++;
+            } else {
+                break;
+            }
+        }
+        // Calculate evaporation factor
+        double evaporationFactor = D - static_cast<double>(q) / m_beaconWindowSize;
+
+        // Evaporate pheromones if factor less than 1.0
+        if (evaporationFactor < 1.0) {
+            NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Evaporated pheromones for neighbour " << neighbourAddr << " with factor " << evaporationFactor);
+            // Evaporate pheromones for this neighbour in all routing table entries
+            for (auto i = m_routingTable.begin(); i != m_routingTable.end(); ++i) {
+                Ipv4AntNetRoutingTableEntry& entry = *i;
+                entry.EvaporatePheromone(neighbourAddr, evaporationFactor);
+            }
+        }
     }
 
     // Increment beacon sent count
