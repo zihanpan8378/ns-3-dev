@@ -5,6 +5,8 @@
 
 #include "ns3/node-container.h"
 
+#include "ns3/ipv4-antnet-routing.h"
+
 namespace ns3
 {
 
@@ -34,6 +36,8 @@ class Ipv4AntNetRoutingHelper : public Ipv4RoutingHelper
         static void InitializeNodeRoutingTables();
 
         static void PrintRoutingTables();
+
+        static bool VerifyRoutingTables(std::list<Ipv4AntNetRouting::RoutingTable> testRoutingTable, std::list<Ipv4AntNetRouting::LocalTrafficStatisticsTable> testLocalTrafficStatsTable);
         
     private:
         static std::map<ns3::Ptr<ns3::Node>, std::list<std::pair<Ipv4Address, Ipv4Address>>> m_neighbourAdjList;

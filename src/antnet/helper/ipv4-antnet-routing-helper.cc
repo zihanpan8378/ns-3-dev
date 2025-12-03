@@ -238,4 +238,34 @@ Ipv4AntNetRoutingHelper::PrintRoutingTables()
     }
 }
 
+bool
+Ipv4AntNetRoutingHelper::VerifyRoutingTables(std::list<Ipv4AntNetRouting::RoutingTable> testRoutingTable, std::list<Ipv4AntNetRouting::LocalTrafficStatisticsTable> testLocalTrafficStatsTable) 
+{
+    for (auto i = NodeList::Begin(); i != NodeList::End(); ++i) {
+        Ptr<Node> node = *i;
+
+        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+        if (!ipv4) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4 object, skipping...");
+            continue;
+        }
+
+        Ptr<Ipv4RoutingProtocol> routing = ipv4->GetRoutingProtocol();
+        if (!routing) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4RoutingProtocol object, skipping...");
+            continue;
+        }
+
+        Ptr<Ipv4AntNetRouting> antRouting = routing->GetObject<Ipv4AntNetRouting>();
+        if (!antRouting) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4AntNetRouting object, skipping...");
+            continue;
+        }
+
+        Ptr<OutputStreamWrapper> stream = new OutputStreamWrapper(&std::cout);
+        antRouting->VerifyRoutingTable(testRoutingTable.front(), testLocalTrafficStatsTable.front());
+    }
+    return true;
+}
+
 } // namespace ns3

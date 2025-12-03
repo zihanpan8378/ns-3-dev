@@ -73,6 +73,11 @@ double Ipv4AntNetLocalTrafficStatisticsEntry::GetUpperBoundDelayFromWindow() con
     return m_meanDelay + Z * (sigma / std::sqrt(windowSize));
 }
 
+bool
+operator==(const Ipv4AntNetLocalTrafficStatisticsEntry a, const Ipv4AntNetLocalTrafficStatisticsEntry b)
+{
+    return (a.GetDestAddr() == b.GetDestAddr() && a.GetDestMask() == b.GetDestMask());
+}
 
 
 } // namespace ns3

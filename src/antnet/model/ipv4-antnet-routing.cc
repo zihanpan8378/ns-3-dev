@@ -148,6 +148,35 @@ Ipv4AntNetRouting::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit
     *stream->GetStream() << std::endl;
 }
 
+bool
+Ipv4AntNetRouting::VerifyRoutingTable(RoutingTable testRoutingTable, LocalTrafficStatisticsTable testLocalTrafficStatsTable)
+{
+    while (m_routingTable.size() != 0) {
+        Ipv4AntNetRoutingTableEntry currentEntry = m_routingTable.front();
+        m_routingTable.pop_front();
+        Ipv4AntNetRoutingTableEntry testEntry = testRoutingTable.front();
+        testRoutingTable.pop_front();
+        if (currentEntry == testEntry) {
+            continue;
+        } else {
+            return false;
+        }
+    }
+
+    while (m_localTrafficStatsTable.size() != 0) {
+        Ipv4AntNetLocalTrafficStatisticsEntry currentEntry = m_localTrafficStatsTable.front();
+        m_localTrafficStatsTable.pop_front();
+        Ipv4AntNetLocalTrafficStatisticsEntry testEntry = testLocalTrafficStatsTable.front();
+        testLocalTrafficStatsTable.pop_front();
+        if (currentEntry == testEntry) {
+            continue;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
 
 Ptr<Ipv4Route>
 Ipv4AntNetRouting::RouteOutput(Ptr<Packet> p,

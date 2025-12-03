@@ -30,6 +30,9 @@ class Node;
 class Ipv4AntNetRouting : public Ipv4RoutingProtocol
 {
     public:
+
+        typedef std::list<Ipv4AntNetRoutingTableEntry> RoutingTable;
+        typedef std::list<Ipv4AntNetLocalTrafficStatisticsEntry> LocalTrafficStatisticsTable;
         /**
          * @brief Get the type ID.
          * @return the object TypeId
@@ -61,6 +64,9 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         void SetIpv4(Ptr<Ipv4> ipv4) override;
         void PrintRoutingTable(Ptr<OutputStreamWrapper> stream,
                                Time::Unit unit = Time::S) const override;
+
+        bool VerifyRoutingTable(RoutingTable testRoutingTable,
+                                LocalTrafficStatisticsTable testLocalTrafficStatsTable);
 
         /**
          * @brief Send a forward ant. The destination will be chosen based on local traffic statistics.
@@ -109,10 +115,6 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
          * @return Pointer to the traffic statistics entry if found, nullptr otherwise
          */
         Ipv4AntNetLocalTrafficStatisticsEntry* FindLocalTrafficStatisticsEntry(Ipv4Address dest);
-
-
-        typedef std::list<Ipv4AntNetRoutingTableEntry> RoutingTable;
-        typedef std::list<Ipv4AntNetLocalTrafficStatisticsEntry> LocalTrafficStatisticsTable;
 
         // Routing table
         RoutingTable m_routingTable;

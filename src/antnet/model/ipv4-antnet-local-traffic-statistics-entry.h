@@ -95,6 +95,8 @@ class Ipv4AntNetLocalTrafficStatisticsEntry
          */
         double GetUpperBoundDelayFromWindow() const;
 };
+bool operator==(const Ipv4AntNetLocalTrafficStatisticsEntry a, const Ipv4AntNetLocalTrafficStatisticsEntry b);
 
 } // namespace ns3
 #endif /* IPV4_ANTNET_LOCAL_TRAFFIC_STATISTICS_ENTRY_H */
+
