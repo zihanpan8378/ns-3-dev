@@ -16,7 +16,8 @@ class AntHeader : public Header
         {
             FORWARD_ANT = 0,
             BACKWARD_ANT = 1,
-            BEACON_ANT = 2
+            BEACON_ANT = 2,
+            FAILURE_MESSAGE_ANT = 3
         };
 
         /**

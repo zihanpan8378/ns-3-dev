@@ -1,5 +1,6 @@
 #include "ipv4-antnet-routing.h"
 #include "ant-header.h"
+#include "failure-message-header.h"
 
 #include "ns3/boolean.h"
 #include "ns3/log.h"
@@ -44,7 +45,7 @@ Ipv4AntNetRouting::GetTypeId()
                           MakeUintegerAccessor(&Ipv4AntNetRouting::m_beaconWindowSize),
                           MakeUintegerChecker<uint32_t>())
             .AddAttribute("UseBeaconWindow",
-                          "Whether to use beacon window for local traffic statistics.",
+                          "Whether to use beacon window for local traffic statistics (only used when UseFailureMessagePropagation is true).",
                           BooleanValue(false),
                           MakeBooleanAccessor(&Ipv4AntNetRouting::m_useBeaconWindow),
                           MakeBooleanChecker())
@@ -52,7 +53,12 @@ Ipv4AntNetRouting::GetTypeId()
                           "Whether to use failure message propagation mechanism.",
                           BooleanValue(false),
                           MakeBooleanAccessor(&Ipv4AntNetRouting::m_useFailureMessagePropagation),
-                          MakeBooleanChecker());
+                          MakeBooleanChecker())
+            .AddAttribute("FailureMessageThreshold",
+                          "Threshold for sending failure messages to neighbours (only used when UseFailureMessagePropagation is true).",
+                          DoubleValue(0.1),
+                          MakeDoubleAccessor(&Ipv4AntNetRouting::m_failureMessageThreshold),
+                          MakeDoubleChecker<double>(0.0, 1.0));;
     return tid;
 }
 
@@ -440,10 +446,28 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                 return false;
             }
         } else if (antType == AntHeader::Type::BEACON_ANT) {
+            // Process beacon ant
             NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Process beacon ant. Ant: " << antHeader.ToString());
 
             // Update received beacon count for neighbour
             m_receivedBeaconsCountMap[header.GetSource()] += 1;
+
+            return true;
+        } else if (antType == AntHeader::Type::FAILURE_MESSAGE_ANT) {
+            // Process failure message ant
+            NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Process failure message ant. Ant: " << antHeader.ToString());
+
+            // Extract failure message header
+            FailureMessageHeader failureMessageHeader;
+            bool ok = copy->RemoveHeader(failureMessageHeader);
+            if (!ok) {
+                NS_LOG_ERROR("Failed to remove FailureMessageHeader");
+                return false;
+            }
+
+            NS_LOG_INFO("    Evaporation entries from failure message: " << failureMessageHeader.ToString());
+            // Evaporate pheromones based on evaporation entries and send further failure messages if needed
+            EvaporateNeighbourPheromones(header.GetSource(), failureMessageHeader.GetEvaporationEntries());
 
             return true;
         } else {
@@ -731,26 +755,41 @@ void Ipv4AntNetRouting::SendBeacon() {
             m_receivedBeaconsCountWindowMap[neighbourAddr].pop_front();
         }
 
-        // Calculate evaporation factor based on consecutive identical beacon counts at the beginning of the window
-        uint32_t q = 0;
-        for (const auto windowEntry : m_receivedBeaconsCountWindowMap[neighbourAddr]) {
-            if (windowEntry == m_receivedBeaconsCountWindowMap[neighbourAddr].front()) {
-                q++;
+        // Calculate evaporation factor based on consecutive 0s at the beginning of the window
+        // In the paper, it counts for consecutive equal numbers since it doesn't clear receivedBeaconsCount after pushing to window
+        // But I chose to clear it after pushing to window to avoid counting large numbers
+        double q = 0.0;
+        for (auto it = m_receivedBeaconsCountWindowMap[neighbourAddr].begin(); it != m_receivedBeaconsCountWindowMap[neighbourAddr].end(); ++it) {
+            if (*it == 0.0) {
+                q += 1.0;
             } else {
                 break;
             }
         }
+
         // Calculate evaporation factor
-        double evaporationFactor = D - static_cast<double>(q) / m_beaconWindowSize;
+        double evaporationFactor = D - q / m_beaconWindowSize;
 
         // Evaporate pheromones if factor less than 1.0
         if (evaporationFactor < 1.0) {
-            NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Evaporated pheromones for neighbour " << neighbourAddr << " with factor " << evaporationFactor);
-            // Evaporate pheromones for this neighbour in all routing table entries
-            for (auto i = m_routingTable.begin(); i != m_routingTable.end(); ++i) {
-                Ipv4AntNetRoutingTableEntry& entry = *i;
-                entry.EvaporatePheromone(neighbourAddr, evaporationFactor);
+            NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Evaporate pheromones for neighbour " << neighbourAddr << " with evaporation factor " << evaporationFactor);
+            // Print out beacon window for debugging
+            std::string beaconWindow;
+            beaconWindow = "[";
+            for (const auto& count : m_receivedBeaconsCountWindowMap[neighbourAddr]) {
+                beaconWindow += std::to_string(count) + ", ";
             }
+            beaconWindow += "]";
+            NS_LOG_INFO("    Beacon window for neighbour " << neighbourAddr << " : " << beaconWindow);
+
+            // Prepare evaporation entries for all destinations
+            std::list<std::pair<Ipv4Address, double>> evaporationEntries;
+            for (const auto& entry : m_routingTable) {
+                evaporationEntries.push_back(std::make_pair(entry.GetDestAddr(), evaporationFactor));
+            }
+
+            // Evaporate pheromones based on evaporation entries and send further failure messages if needed
+            EvaporateNeighbourPheromones(neighbourAddr, evaporationEntries);
         }
     }
 
@@ -763,6 +802,77 @@ void Ipv4AntNetRouting::SendBeacon() {
         &Ipv4AntNetRouting::SendBeacon,
         this
     );
+}
+
+void Ipv4AntNetRouting::EvaporateNeighbourPheromones(Ipv4Address neighbourAddr, std::list<std::pair<Ipv4Address, double>> evaporationEntries) {
+    NS_LOG_FUNCTION(this << neighbourAddr);
+
+    // Evaporate pheromones for this neighbour in all routing table entries
+    std::map<Ipv4Address, double> evaporationEffects;
+
+    // Iterate through evaporation entries
+    for (const auto& entryPair : evaporationEntries) {
+        Ipv4Address destAddr = entryPair.first;
+        double evaporationFactor = entryPair.second;
+
+        // Find routing table entry for this destination and evaporate pheromone for the neighbour
+        // Finding the entry should iterate through the routing table since the routing table is a list
+        // Probably we can optimize this by using a map for routing table
+        for (auto i = m_routingTable.begin(); i != m_routingTable.end(); ++i) {
+            Ipv4AntNetRoutingTableEntry& entry = *i;
+            if (entry.GetDestAddr() == destAddr) {
+                double evaporationEffect = entry.EvaporatePheromone(neighbourAddr, evaporationFactor);
+                NS_LOG_INFO("    Evaporated pheromone for destination " << destAddr << " via neighbour " << neighbourAddr << " with factor " << evaporationFactor << ", effect: " << evaporationEffect);
+                if (evaporationEffect > m_failureMessageThreshold) { // Only include significant evaporation effects
+                    evaporationEffects[destAddr] = 1 - evaporationEffect;
+                }
+                break;
+            }
+        }
+    }
+
+    // If failure message propagation is enabled, send failure messages to other neighbours
+    if (m_useFailureMessagePropagation) {
+        // If no significant evaporation effects, no need to send failure messages
+        if (evaporationEffects.empty()) {
+            return;
+        }
+        // Iterate through other neighbours to send failure messages
+        for (const auto& neighbour : m_neighbourInterfaceMap) {
+            Ipv4Address messageNeighbourAddr = neighbour.first;
+
+            // Skip the neighbour that caused the evaporation
+            if (messageNeighbourAddr == neighbourAddr) {
+                continue;
+            }
+
+            // Prepare and send failure message to other neighbours
+
+            // Create an empty packet
+            Ptr<Packet> failureMessagePacket = Create<Packet>();
+
+            // Create and init AntHeader for failure message
+            Ptr<Ipv4Route> route = LookupRoute(messageNeighbourAddr, nullptr, true);
+
+            // Create and init FailureMessageHeader
+            FailureMessageHeader failureMessageHeader(evaporationEffects);
+            failureMessagePacket->AddHeader(failureMessageHeader);
+
+            // Create and init AntHeader for failure message
+            AntHeader antHeader(
+                AntHeader::Type::FAILURE_MESSAGE_ANT,                                       // Ant type
+                m_ipv4->GetObject<Node>()->GetId(),                                         // Source node ID
+                m_ipv4->GetAddress(route->GetOutputDevice()->GetIfIndex(), 0).GetLocal(),   // Source address
+                messageNeighbourAddr,                                                       // Destination address is neighbour
+                m_roundNumber                                                               // Round number
+            );
+            failureMessagePacket->AddHeader(antHeader);
+
+            // Send the failure message packet
+            NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send failure message to neighbour " << messageNeighbourAddr << ". Ant: " << antHeader.ToString());
+            m_ipv4->Send(failureMessagePacket, route->GetSource(), messageNeighbourAddr, PROTOCOL_ANTNET, route);
+        }
+    }
 }
 
 Ptr<Ipv4Route> Ipv4AntNetRouting::LookupRoute(Ipv4Address dest, Ptr<NetDevice> oif, bool backwardAntLookup) const {

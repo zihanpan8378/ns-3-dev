@@ -2,6 +2,7 @@ set(source_files
   helper/ipv4-antnet-routing-helper.cc
   test/test-four-node.cc
   model/ant-header.cc
+  model/failure-message-header.cc
   model/ipv4-antnet-routing-table-entry.cc
   model/ipv4-antnet-local-traffic-statistics-entry.cc
   model/ipv4-antnet-routing.cc
@@ -10,6 +11,7 @@ set(source_files
 set(header_files
   helper/ipv4-antnet-routing-helper.h
   model/ant-header.h
+  model/failure-message-header.h
   model/ipv4-antnet-routing-table-entry.h
   model/ipv4-antnet-local-traffic-statistics-entry.h
   model/ipv4-antnet-routing.h

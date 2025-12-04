@@ -110,6 +110,15 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         Ptr<Ipv4Route> LookupRoute(Ipv4Address dest, Ptr<NetDevice> oif = nullptr, bool backwardAntLookup = false) const;
 
         /**
+         * @brief Evaporate pheromone values for the given neighbour based on the evaporation entries
+         * This function is only used when m_useBeaconWindow is on
+         * If m_useFailureMessagePropagation is also on, this function will prepare and send failure messages to neighbours
+         * @param neighbourAddr The address of the neighbour
+         * @param m_evaporationEntries List of destination addresses and their evaporation factors
+         */
+        void EvaporateNeighbourPheromones(Ipv4Address neighbourAddr, std::list<std::pair<Ipv4Address, double>> m_evaporationEntries);
+
+        /**
          * @brief Find routing table entry for the given destination
          * @param dest The destination address
          * @return Pointer to the routing table entry if found, nullptr otherwise
@@ -164,6 +173,9 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         // Variables for failure message propagation mechanism
         // Whether to use failure message propagation mechanism
         bool m_useFailureMessagePropagation;
+        // Threshold for sending failure messages to neighbours (between 0 and 1)
+        // Lower value means nodes are more likely to propogate failure messages to neighbours
+        double m_failureMessageThreshold;
 };
 
 } // Namespace ns3
