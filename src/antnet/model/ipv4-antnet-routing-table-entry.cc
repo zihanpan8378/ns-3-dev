@@ -213,16 +213,18 @@ Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address nextHop, double delayMi
     }
 }
 
-void 
+double 
 Ipv4AntNetRoutingTableEntry::EvaporatePheromone(Ipv4Address nextHop, double evaporationFactor)
 {
     NS_LOG_FUNCTION(this << nextHop);
 
     NS_ASSERT(evaporationFactor > 0.0 && evaporationFactor < 1.0);
 
+    double originalPheromone = 0.0;
     // Evaporate pheromone for the given next hop address
     for (auto& entry : m_pheromoneList) {
         if (entry.first.first == nextHop) {
+            originalPheromone = entry.second;
             entry.second *= evaporationFactor;
         }
     }
@@ -235,6 +237,10 @@ Ipv4AntNetRoutingTableEntry::EvaporatePheromone(Ipv4Address nextHop, double evap
     for (auto& entry : m_pheromoneList) {
         entry.second /= totalPheromone;
     }
+
+    // Return the effect of evaporation on the pheromone value
+    // This value is used for failure message propagation
+    return originalPheromone * (1.0 - evaporationFactor);
 }
 
 bool

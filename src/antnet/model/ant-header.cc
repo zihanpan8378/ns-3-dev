@@ -215,6 +215,8 @@ AntHeader::Print(std::ostream& os) const
         os << "AntHeader[type=BACKWARD_ANT, ";
     } else if (type == BEACON_ANT) {
         os << "AntHeader[type=BEACON_ANT, ";
+    } else if (type == FAILURE_MESSAGE_ANT) {
+        os << "AntHeader[type=FAILURE_MESSAGE_ANT, ";
     } else {
         os << "AntHeader[type=UNKNOWN, ";
     }
@@ -224,23 +226,25 @@ AntHeader::Print(std::ostream& os) const
     os << "destinationAddress=" << m_destinationAddress << ", ";
     os << "round=" << m_round << "]\n";
 
-    os << "    forwardPath=";
-    for (uint32_t k = 0; k < m_forwardStack.size(); ++k) {
-        os << "(" << m_forwardStack[k].GetNodeId() << ":" << m_forwardStack[k].GetAddressIn() << "-" << m_forwardStack[k].GetAddressOut() << ":" << m_forwardStack[k].GetTime() << "ms)";
-        if (k != m_forwardStack.size() - 1) {
-            os << " -> ";
+    if (type == FORWARD_ANT || type == BACKWARD_ANT) {
+        os << "    forwardPath=";
+        for (uint32_t k = 0; k < m_forwardStack.size(); ++k) {
+            os << "(" << m_forwardStack[k].GetNodeId() << ":" << m_forwardStack[k].GetAddressIn() << "-" << m_forwardStack[k].GetAddressOut() << ":" << m_forwardStack[k].GetTime() << "ms)";
+            if (k != m_forwardStack.size() - 1) {
+                os << " -> ";
+            }
         }
-    }
-    os << "\n";
+        os << "\n";
 
-    os << "    returnPath=";
-    for (uint32_t k = 0; k < m_backwardStack.size(); ++k) {
-        os << "(" << m_backwardStack[k].GetNodeId() << ":" << m_backwardStack[k].GetAddressIn() << "-" << m_backwardStack[k].GetAddressOut() << ":" << m_backwardStack[k].GetTime() << "ms)";
-        if (k != m_backwardStack.size() - 1) {
-            os << " -> ";
+        os << "    returnPath=";
+        for (uint32_t k = 0; k < m_backwardStack.size(); ++k) {
+            os << "(" << m_backwardStack[k].GetNodeId() << ":" << m_backwardStack[k].GetAddressIn() << "-" << m_backwardStack[k].GetAddressOut() << ":" << m_backwardStack[k].GetTime() << "ms)";
+            if (k != m_backwardStack.size() - 1) {
+                os << " -> ";
+            }
         }
+        os << "";
     }
-    os << "";
 }
 
 void

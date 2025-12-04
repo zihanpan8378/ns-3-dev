@@ -65,7 +65,8 @@ main(int argc, char* argv[])
     Config::SetDefault("ns3::Ipv4AntNetRouting::ForwardAntInterval", TimeValue(Seconds(10)));
     Config::SetDefault("ns3::Ipv4AntNetRouting::BeaconWindowSize", UintegerValue(10));
     Config::SetDefault("ns3::Ipv4AntNetRouting::UseBeaconWindow", BooleanValue(true));
-    Config::SetDefault("ns3::Ipv4AntNetRouting::UseFailureMessagePropagation", BooleanValue(false));
+    Config::SetDefault("ns3::Ipv4AntNetRouting::UseFailureMessagePropagation", BooleanValue(true));
+    Config::SetDefault("ns3::Ipv4AntNetRouting::FailureMessageThreshold", DoubleValue(0.1));
 
     CommandLine cmd(__FILE__);
     bool enableFlowMonitor = false;

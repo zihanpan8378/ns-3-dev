@@ -97,8 +97,9 @@ class Ipv4AntNetRoutingTableEntry
          * @brief Evaporate pheromone values for the given next hop address.
          * @param nextHop The address of the next hop
          * @param evaporationFactor The evaporation factor (between D - 1 and 1), where D is 1.35
+         * @return The effect of evaporation on the pheromone value (used for failure message propagation)
          */
-        void EvaporatePheromone(Ipv4Address nextHop, double evaporationFactor);
+        double EvaporatePheromone(Ipv4Address nextHop, double evaporationFactor);
         
 
         /**
