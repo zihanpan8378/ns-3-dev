@@ -1,6 +1,5 @@
 set(source_files
   helper/ipv4-antnet-routing-helper.cc
-  test/test-four-node.cc
   model/ant-header.cc
   model/failure-message-header.cc
   model/ipv4-antnet-routing-table-entry.cc
@@ -17,6 +16,10 @@ set(header_files
   model/ipv4-antnet-routing.h
 )
 
+set(test_sources
+  test/antnet-forward-ant-test.cc
+)
+
 build_lib(
   LIBNAME antnet
   SOURCE_FILES ${source_files}
@@ -28,4 +31,6 @@ build_lib(
     ${libapplications}
     ${libwifi}
     ${libpoint-to-point}
+  TEST_SOURCES
+    ${test_sources}
 )

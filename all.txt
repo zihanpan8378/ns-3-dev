@@ -1,0 +1,2 @@
+PASS: Test Suite "antnet-forward-ant-suite" (0.001)
+PASS: Test Case "Test Ipv4AntNetRouting::ScheduleForwardAnt weighted selection" (0.001)

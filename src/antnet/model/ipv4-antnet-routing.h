@@ -30,7 +30,6 @@ class Node;
 class Ipv4AntNetRouting : public Ipv4RoutingProtocol
 {
     public:
-
         typedef std::list<Ipv4AntNetRoutingTableEntry> RoutingTable;
         typedef std::list<Ipv4AntNetLocalTrafficStatisticsEntry> LocalTrafficStatisticsTable;
         /**
@@ -57,6 +56,7 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
                         const ErrorCallback& ecb) override;
 
         // These functions are not implemented yet
+        void AddLocalTrafficStat (Ipv4Address dest, double dataFlowMeasure);
         void NotifyInterfaceUp(uint32_t interface) override;
         void NotifyInterfaceDown(uint32_t interface) override;
         void NotifyAddAddress(uint32_t interface, Ipv4InterfaceAddress address) override;
@@ -79,8 +79,6 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
             const std::list<std::pair<Ipv4Address, Ipv4Address>>& neighbourList
         );
 
-    private:
-
         /**
          * @brief Send a forward ant. The destination will be chosen based on local traffic statistics.
          * This will be called periodically to send forward ants (don't know how to call this yet)
@@ -91,7 +89,9 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
          * @brief Send a forward ant to the specified destination
          * @param dest The destination address
          */
-        void SendForwardAnt(Ipv4Address dest);
+        virtual void SendForwardAnt(Ipv4Address dest);
+
+    private:
 
         /**
          * @brief Send beacon ants to all neighbours periodically

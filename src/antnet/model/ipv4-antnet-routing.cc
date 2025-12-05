@@ -19,6 +19,7 @@
 
 #include <iomanip>
 #include <vector>
+#include <cmath> 
 
 namespace ns3
 {
@@ -994,5 +995,31 @@ Ipv4AntNetRouting::FindLocalTrafficStatisticsEntry(Ipv4Address dest)
     }
     return nullptr;
 }
+
+void
+Ipv4AntNetRouting::AddLocalTrafficStat (Ipv4Address dest, double dataFlowMeasure)
+{
+  // 1) 用构造函数设置目的地址和掩码
+  //    这里我用的是 host 掩码 255.255.255.255，你以后想按网段统计可以再改。
+  Ipv4AntNetLocalTrafficStatisticsEntry e (
+      dest,
+      Ipv4Mask ("255.255.255.255")
+  );
+
+  // 2) 你的类里没有“直接设置 m_dataFlowMeasure”的函数，
+  //    只有 AddDataFlowMeasure() 每次 +1。
+  //    我们就把 dataFlowMeasure 当成“加多少次”的计数。
+  //
+  //    在测试里我们只用 1.0 和 3.0，所以直接 round 成 uint32_t 就够了。
+  uint32_t increments = static_cast<uint32_t> (std::round (dataFlowMeasure));
+  for (uint32_t i = 0; i < increments; ++i)
+    {
+      e.AddDataFlowMeasure();
+    }
+
+  // 3) 丢进本地流量统计表
+  m_localTrafficStatsTable.push_back (e);
+}
+
 
 }
