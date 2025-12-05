@@ -34,7 +34,11 @@ Ipv4AntNetLocalTrafficStatisticsEntry::ToString() const
 
 void Ipv4AntNetLocalTrafficStatisticsEntry::UpdateStatistics(double delayMs) {
     // Update mean delay using exponential moving average
-    m_meanDelay = m_meanDelay + ETA * (delayMs - m_meanDelay);
+    if (m_meanDelay <= 0.0) {
+        m_meanDelay = delayMs;
+    } else {
+        m_meanDelay = m_meanDelay + ETA * (delayMs - m_meanDelay);
+    }
 
     // Update delay variance
     double delta = delayMs - m_meanDelay;

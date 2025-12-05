@@ -195,14 +195,33 @@ void
 Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address nextHop, double delayMillisecond, Ipv4AntNetLocalTrafficStatisticsEntry trafficStat)
 {
     NS_LOG_FUNCTION(this << nextHop);
-    
+
+    // Assert that nextHop is in m_pheromoneList
+    bool found = false;
+    for (const auto& entry : m_pheromoneList) {
+        if (entry.first.first == nextHop) {
+            found = true;
+            break;
+        }
+    }
+    NS_ASSERT_MSG(found, "nextHop " << nextHop << " not found in pheromone list");
+
     double bestDelay = trafficStat.GetBestDelayFromWindow();
     double iInf = bestDelay;
     double iSup = trafficStat.GetUpperBoundDelayFromWindow();
 
-    double reward = C1 * (bestDelay / (delayMillisecond + 1e-6)) + C2 * ((iSup - iInf) / ((iSup - iInf) + (delayMillisecond - iInf)));
+    double reward = C1 * (bestDelay / (delayMillisecond + 1e-6)) + C2 * ((iSup - iInf) / ((iSup - iInf) + (delayMillisecond + 1e-6 - iInf))); // Avoid division by zero
 
+    if (reward > 0.95) {
+        reward = 0.95;
+    } else if (reward < 0.05) {
+        reward = 0.05;
+    }
+
+
+    double sum = 0.0;
     for (auto& entry : m_pheromoneList) {
+        double pheromoneBefore = entry.second;
         if (entry.first.first == nextHop) {
             // Update pheromone for the chosen next hop
             entry.second = entry.second + reward * (1 - entry.second);
@@ -210,7 +229,10 @@ Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address nextHop, double delayMi
             // Evaporate pheromone for other next hops
             entry.second = entry.second - reward * entry.second;
         }
+        sum += entry.second;
+        NS_ASSERT_MSG(entry.second >= 0.0 && entry.second <= 1.0, "Pheromone value out of range: " << entry.second << " (before: " << pheromoneBefore << ", reward: " << reward << ")");
     }
+    NS_ASSERT_MSG(sum > 1.0 - 1e-6 && sum < 1.0 + 1e-6, "Sum of pheromone values out of range: " << sum);
 }
 
 double 
@@ -218,7 +240,7 @@ Ipv4AntNetRoutingTableEntry::EvaporatePheromone(Ipv4Address nextHop, double evap
 {
     NS_LOG_FUNCTION(this << nextHop);
 
-    NS_ASSERT(evaporationFactor > 0.0 && evaporationFactor < 1.0);
+    NS_ASSERT_MSG(evaporationFactor > 0.0 && evaporationFactor < 1.0, "Evaporation factor out of range: " << evaporationFactor);
 
     double originalPheromone = 0.0;
     // Evaporate pheromone for the given next hop address
@@ -227,6 +249,7 @@ Ipv4AntNetRoutingTableEntry::EvaporatePheromone(Ipv4Address nextHop, double evap
             originalPheromone = entry.second;
             entry.second *= evaporationFactor;
         }
+        NS_ASSERT_MSG(entry.second >= 0.0 && entry.second <= 1.0, "Pheromone value out of range: " << entry.second);
     }
 
     // Normalize pheromone values to sum to 1
@@ -236,6 +259,7 @@ Ipv4AntNetRoutingTableEntry::EvaporatePheromone(Ipv4Address nextHop, double evap
     }
     for (auto& entry : m_pheromoneList) {
         entry.second /= totalPheromone;
+        NS_ASSERT_MSG(entry.second >= 0.0 && entry.second <= 1.0, "Pheromone value out of range: " << entry.second);
     }
 
     // Return the effect of evaporation on the pheromone value
