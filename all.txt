@@ -1,2 +1,3 @@
-PASS: Test Suite "antnet-forward-ant-suite" (0.001)
-PASS: Test Case "Test Ipv4AntNetRouting::ScheduleForwardAnt weighted selection" (0.001)
+PASS: Test Suite "antnet-pheromone-suite" (0.000)
+PASS: Test Case "Test pheromone reinforcement for good vs bad delay (trend only)" (0.000)
+PASS: Test Case "Test pheromone evaporation for a given neighbour" (0.000)

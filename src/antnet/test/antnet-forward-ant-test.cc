@@ -57,10 +57,6 @@ private:
 
 NS_OBJECT_ENSURE_REGISTERED (TestAntNetRouting);
 
-// ----------------------------------------------------------------------------
-// ForwardAntScheduleTestCase: verify that weighted random selection is biased
-// toward the destination with the larger weight
-// ----------------------------------------------------------------------------
 
 class ForwardAntScheduleTestCase : public TestCase
 {
@@ -75,10 +71,7 @@ private:
     Ptr<TestAntNetRouting> routing = CreateObject<TestAntNetRouting> ();
     routing->ClearStats ();
 
-    // Construct a simple scenario:
-    //   10.0.0.2 with weight 1.0
-    //   10.0.0.3 with weight 3.0
-    // Expectation: 10.0.0.3 should be chosen noticeably more often than 10.0.0.2.
+
     routing->AddLocalTrafficStatEntry (Ipv4Address ("10.0.0.2"), 1.0);
     routing->AddLocalTrafficStatEntry (Ipv4Address ("10.0.0.3"), 3.0);
 
@@ -90,15 +83,11 @@ private:
 
     const std::vector<Ipv4Address> &dests = routing->GetSentDests ();
 
-    // 1) Each call to ScheduleForwardAnt should correspond to exactly one SendForwardAnt
-    NS_TEST_ASSERT_MSG_EQ (dests.size (),
-                           runTimes,
-                           "Each ScheduleForwardAnt call should send exactly one ant");
+    NS_TEST_ASSERT_MSG_EQ (dests.size (), runTimes, "Each ScheduleForwardAnt call should send exactly one ant");
 
     uint32_t count2 = 0;
     uint32_t count3 = 0;
 
-    // only two possible destinations
     for (const auto &addr : dests) {
         if (addr == Ipv4Address ("10.0.0.2")) {
             ++count2;
@@ -111,23 +100,15 @@ private:
 
     NS_LOG_INFO ("count(10.0.0.2) = " << count2 << ", count(10.0.0.3) = " << count3);
 
-    NS_TEST_ASSERT_MSG_GT (count2,
-                           0u,
-                           "Destination 10.0.0.2 should be chosen at least once");
-    NS_TEST_ASSERT_MSG_GT (count3,
-                           0u,
-                           "Destination 10.0.0.3 should be chosen at least once");
+    NS_TEST_ASSERT_MSG_GT (count2, 0u, "Destination 10.0.0.2 should be chosen at least once");
+    NS_TEST_ASSERT_MSG_GT (count3, 0u, "Destination 10.0.0.3 should be chosen at least once");
 
     NS_TEST_ASSERT_MSG_GT (count3, count2, "10.0.0.3 (weight 3) should be chosen more often than 10.0.0.2 (weight 1)");
 
     double ratio = static_cast<double> (count3) / static_cast<double> (count2);
 
-    NS_TEST_ASSERT_MSG_GT (ratio,
-                           1.5,
-                           "Selection ratio count3/count2 is too small; weighting may be wrong");
-    NS_TEST_ASSERT_MSG_LT (ratio,
-                           5.0,
-                           "Selection ratio count3/count2 is too large; something may be wrong");
+    NS_TEST_ASSERT_MSG_GT (ratio, 1.5, "Selection ratio count3/count2 is too small; weighting may be wrong");
+    NS_TEST_ASSERT_MSG_LT (ratio, 5.0, "Selection ratio count3/count2 is too large; something may be wrong");
 
     Simulator::Destroy ();
   }

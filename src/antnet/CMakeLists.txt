@@ -18,6 +18,7 @@ set(header_files
 
 set(test_sources
   test/antnet-forward-ant-test.cc
+  test/antnet-pheromone-test.cc
 )
 
 build_lib(
