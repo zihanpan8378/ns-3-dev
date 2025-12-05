@@ -388,10 +388,9 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                     if (subPathTrafficEntry) {
                         if (delayMs <= subPathTrafficEntry->GetUpperBoundDelayFromWindow()) {
                             NS_LOG_LOGIC("Subpath to " << subpathDest << " is good enough with delay " << delayMs << " ms, updating pheromone");
-                            Ipv4Address subpathNextHopAddr = backwardStack[idx - 1].GetAddressIn();
                             Ipv4AntNetRoutingTableEntry* subpathRouteEntry = FindRoutingTableEntry(subpathDest);
                             if (subpathRouteEntry) {
-                                subpathRouteEntry->UpdatePheromone(subpathNextHopAddr, delayMs, *subPathTrafficEntry);
+                                subpathRouteEntry->UpdatePheromone(nextForwardHopAddr, delayMs, *subPathTrafficEntry);
                                 NS_LOG_LOGIC("Updated routing table pheromones for subpath destination " << subpathDest);
                             } else {
                                 NS_LOG_ERROR("No routing table entry found for subpath destination " << subpathDest);
