@@ -33,22 +33,27 @@ Ipv4AntNetLocalTrafficStatisticsEntry::ToString() const
 }
 
 void Ipv4AntNetLocalTrafficStatisticsEntry::UpdateStatistics(double delayMs) {
+    double delta;
     // Update mean delay using exponential moving average
     if (m_meanDelay <= 0.0) {
         m_meanDelay = delayMs;
+        delta = 0.0;
     } else {
-        m_meanDelay = m_meanDelay + ETA * (delayMs - m_meanDelay);
+        delta = delayMs - m_meanDelay;
+        m_meanDelay = m_meanDelay + ETA * delta;
     }
 
-    // Update delay variance
-    double delta = delayMs - m_meanDelay;
     m_delayVariance = m_delayVariance + ETA * ((delta * delta) - m_delayVariance);
+    if (m_delayVariance < 0.0) {
+        m_delayVariance = 0.0; // Prevent negative variance due to numerical errors
+    }
 
     // Update window delays
     if (m_delayWindow.size() >= MAX_WINDOW_SIZE) {
         m_delayWindow.pop_front();
     }
     m_delayWindow.push_back(delayMs);
+    NS_LOG_INFO("Updated statistics for destination " << m_dest << ": delay=" << delayMs << "ms, mean delay=" << m_meanDelay << "ms, variance=" << m_delayVariance << "ms^2");
 }
 
 void Ipv4AntNetLocalTrafficStatisticsEntry::AddDataFlowMeasure() { 

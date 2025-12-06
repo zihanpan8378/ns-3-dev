@@ -182,6 +182,8 @@ Ipv4AntNetRoutingHelper::BuildAntNetTopology()
 void 
 Ipv4AntNetRoutingHelper::InitializeNodeRoutingTables() 
 {
+    int num_nodes = NodeList::GetNNodes();
+    Ipv4AntNetRoutingTableEntry::Nk = num_nodes;
     for (auto i = NodeList::Begin(); i != NodeList::End(); ++i) {
         Ptr<Node> node = *i;
 
@@ -212,6 +214,8 @@ Ipv4AntNetRoutingHelper::InitializeNodeRoutingTables()
 void 
 Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourceAndDestination(int SourceID, Ipv4Address DestinationAddress)
 {
+    int num_nodes = NodeList::GetNNodes();
+    Ipv4AntNetRoutingTableEntry::Nk = num_nodes;
     for (auto i = NodeList::Begin(); i != NodeList::End(); ++i) {
         Ptr<Node> node = *i;
 

@@ -139,6 +139,7 @@ class Ipv4AntNetRoutingTableEntry
         static Ipv4AntNetRoutingTableEntry CreateNetworkRouteTo(Ipv4Address network,
                                                                 Ipv4Mask networkMask,
                                                                 std::list<PheromoneKey> nextHops);
+        static int Nk; // Number of nodes in the network(nodes...? or IP...?)
 
     private:
         Ipv4Address m_dest;

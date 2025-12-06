@@ -68,6 +68,7 @@ main(int argc, char* argv[])
     LogComponentEnable("Ipv4AntNetRoutingHelper", LOG_LEVEL_INFO);
     LogComponentEnable("Ipv4AntNetRouting", LOG_LEVEL_INFO);
     LogComponentEnable("AntHeader", LOG_LEVEL_INFO);
+    LogComponentEnable("Ipv4AntNetLocalTrafficStatisticsEntry", LOG_LEVEL_INFO);
     
     // Set up some default values for the simulation.  Use the
     Config::SetDefault("ns3::OnOffApplication::PacketSize", UintegerValue(512));
@@ -161,7 +162,7 @@ main(int argc, char* argv[])
 
     // InetSocketAddress dest = InetSocketAddress(i6i7.GetAddress(0), port);
 
-    // OnOffHelper onoff("ns3::UdpSocketFactory", dest);
+    // OnOffHelper onoff("ns3::UdpSocketFactory", dest);  MPIA = 0.3ms
     // onoff.SetAttribute("DataRate", StringValue("2Mbps"));
     // onoff.SetAttribute("PacketSize", UintegerValue(512));
 
