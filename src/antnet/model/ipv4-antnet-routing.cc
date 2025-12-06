@@ -497,26 +497,69 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
     }
 }
 
+// enable ants
+void Ipv4AntNetRouting::EnableAnts() {
+    m_enableAnts = true;
+}
+
+// disable ants
+void Ipv4AntNetRouting::DisableAnts() {
+    m_enableAnts = false;
+}
+
+// deterministic destination ants for debugging
+void Ipv4AntNetRouting::SetDeterministicAnts(bool deterministic) {
+    m_deterministicAnts = deterministic;
+}
+bool Ipv4AntNetRouting::GetDeterministicAnts() const {
+    return m_deterministicAnts;
+}
+
+void Ipv4AntNetRouting::SetSpecificDestination(Ipv4Address dest) {
+    m_specificDestination = dest;
+}
+Ipv4Address Ipv4AntNetRouting::GetSpecificDestination() const {
+    return m_specificDestination;
+}
+
+// for changing forward ant sending interval
+void Ipv4AntNetRouting::SetForwardAntInterval(Time interval) {
+    m_forwardAntInterval = interval;
+}
+
 void Ipv4AntNetRouting::ScheduleForwardAnt() {
+    bool deterministic = m_deterministicAnts;
+    NS_LOG_INFO(m_enableAnts);
+
     NS_LOG_FUNCTION(this);
     // Select destination based on local traffic statistics using weighted random selection
     // The weight is the data flow measure
-    double sum_weights = 0.0;
-    for (const auto& entry : m_localTrafficStatsTable) {
-        sum_weights += entry.GetDataFlowMeasure();
-    }
-    double randomValue = static_cast<double>(rand()) / RAND_MAX * sum_weights;
-    double cumulative_weight = 0.0;
-    for (const auto& entry : m_localTrafficStatsTable) {
-        cumulative_weight += entry.GetDataFlowMeasure();
-        if (randomValue <= cumulative_weight) {
-            Ipv4Address dest = entry.GetDestAddr();
-            SendForwardAnt(dest);
-            break;
+    if (m_enableAnts) {
+        if (deterministic) {
+            // Send forward ant to specific destination
+            Ipv4Address specificDest = m_specificDestination;
+            SendForwardAnt(specificDest);
+            NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send deterministic forward ant to " << specificDest);
+            return;
+        }
+        else {
+            double sum_weights = 0.0;
+            for (const auto& entry : m_localTrafficStatsTable) {
+                sum_weights += entry.GetDataFlowMeasure();
+            }
+            double randomValue = static_cast<double>(rand()) / RAND_MAX * sum_weights;
+            double cumulative_weight = 0.0;
+            for (const auto& entry : m_localTrafficStatsTable) {
+                cumulative_weight += entry.GetDataFlowMeasure();
+                if (randomValue <= cumulative_weight) {
+                    Ipv4Address dest = entry.GetDestAddr();
+                    SendForwardAnt(dest);
+                    break;
+                }
+            }
         }
     }
 
-    // Reschedule the next forward ant event
     m_forwardAntEvent = Simulator::Schedule(
         m_forwardAntInterval,
         &Ipv4AntNetRouting::ScheduleForwardAnt,
@@ -526,7 +569,10 @@ void Ipv4AntNetRouting::ScheduleForwardAnt() {
 
 void Ipv4AntNetRouting::InitializeRoutingTable(
     const std::list<std::pair<Ipv4Address, Ipv4Address>>& destList, 
-    const std::list<std::pair<Ipv4Address, Ipv4Address>>& neighbourList) {
+    const std::list<std::pair<Ipv4Address, Ipv4Address>>& neighbourList,
+    int ant_send_mode,
+    Ipv4Address specificDestination
+) {
     NS_LOG_FUNCTION(this);
 
     // Set default beacon interval as half of forward ant interval
@@ -615,11 +661,29 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
     }
 
     // Schedule the first forward ant event
-    m_forwardAntEvent = Simulator::Schedule(
-        m_forwardAntInterval,
-        &Ipv4AntNetRouting::ScheduleForwardAnt,
-        this
-    );
+    if (ant_send_mode == 0) {
+        // for debugging, the node does not send ants 
+        NS_LOG_INFO("Ant send mode is 0, not sending forward ants.");
+    }
+    else if (ant_send_mode == 1) {
+        NS_LOG_INFO("Ant send mode is 1, sending forward ants deterministically to specific destination.");
+        SetDeterministicAnts(true);
+        SetSpecificDestination(specificDestination);
+        m_forwardAntEvent = Simulator::Schedule(
+            m_forwardAntInterval,
+            &Ipv4AntNetRouting::ScheduleForwardAnt,
+            this
+        );
+    }
+    else {
+        NS_LOG_INFO("Ant send mode is 2, sending forward ants stochastically based on local traffic statistics.");
+        SetDeterministicAnts(false);
+        m_forwardAntEvent = Simulator::Schedule(
+            m_forwardAntInterval,
+            &Ipv4AntNetRouting::ScheduleForwardAnt,
+            this
+        );
+    }
 
     // Initialize beacon mechanism if enabled
     if (m_useBeaconWindow) {

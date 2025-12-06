@@ -70,8 +70,18 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
          */
         void InitializeRoutingTable(
             const std::list<std::pair<Ipv4Address, Ipv4Address>>& destList, 
-            const std::list<std::pair<Ipv4Address, Ipv4Address>>& neighbourList
+            const std::list<std::pair<Ipv4Address, Ipv4Address>>& neighbourList,
+            int ant_send_mode,
+            Ipv4Address specificDestination = Ipv4Address()
         );
+
+        void EnableAnts();
+        void DisableAnts();
+        void SetDeterministicAnts(bool deterministic);
+        bool GetDeterministicAnts() const;
+        void SetSpecificDestination(Ipv4Address dest);
+        Ipv4Address GetSpecificDestination() const;
+        void SetForwardAntInterval(Time interval);
 
     private:
 
@@ -144,6 +154,19 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         uint32_t m_roundNumber;
         // Map of neighbour address to interface index
         std::map<Ipv4Address, uint32_t> m_neighbourInterfaceMap;
+
+
+
+        // -- additional variables for AntNet routing protocol --
+        // enable ants
+        bool m_enableAnts = true;
+        // Specific destination for deterministic forward ants (used only if deterministic mode is on)
+        Ipv4Address m_specificDestination;
+        // Whether to send forward ants deterministically to a specific destination
+        bool m_deterministicAnts = false;
+        /// -- additional variables for AntNet routing protocol --
+
+        
 
         // Variables for beacon mechanism
         // Whether to use beacon window to detect neighbour failures

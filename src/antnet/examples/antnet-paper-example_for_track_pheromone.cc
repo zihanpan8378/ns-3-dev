@@ -149,7 +149,7 @@ main(int argc, char* argv[])
 
     // Create routing tables
     Ipv4AntNetRoutingHelper::BuildAntNetTopology();
-    Ipv4AntNetRoutingHelper::InitializeNodeRoutingTables();
+    Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourceAndDestination(0,Ipv4Address("10.1.8.2"));
 
     // Print Initial Routing Tables
     NS_LOG_INFO("Initial Routing Tables:");

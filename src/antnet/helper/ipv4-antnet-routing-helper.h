@@ -33,6 +33,8 @@ class Ipv4AntNetRoutingHelper : public Ipv4RoutingHelper
 
         static void InitializeNodeRoutingTables();
 
+        static void InitializeNodeRoutingTablesForSpecificSourceAndDestination(int SourceID, Ipv4Address DestinationAddress);
+
         static void PrintRoutingTables();
         
     private:
