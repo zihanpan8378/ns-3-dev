@@ -23,6 +23,7 @@ Basic AntNet implementation with point to point channels
 
 ## Milestone 2
 CSMA and Wifi support for AntNet
+
 Fault tolerance add-on #1: active failure detection and pheromone evaporation
 - Periodic beacon ant broadcasting
 - Sliding window for failure detection
