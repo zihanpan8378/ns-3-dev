@@ -242,43 +242,60 @@ Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourceAndDestinat
         if (node->GetId() == SourceID) {
             NS_LOG_LOGIC("    Initializing routing table for node ID " << node->GetId() << " to send ants to specific destination ID " << DestinationAddress);
             NS_LOG_LOGIC("    This node is sending ants.");
-            // Find destination address
-            // Ipv4Address destAddr;
-            // for (const auto &addr : m_nodeList) {
-            //     if (addr.first == DestinationAddress) {
-            //         continue;
-            //     }
-            // }
-            // for (const auto& destAddrAndMask : m_nodeList) {
-            //     // nodeがdestinationIDにの時のみ、destAddrにアドレスをセットしてループを抜ける
-            //     if (destAddrAndMask.first == Ipv4Address::GetLoopback()) {
-            //         continue;
-            //     }
-            //         Ipv4Address destAddr = destAddrAndMask.first;
-            // }
-            // bool found = false;
-            // for (NodeList::Iterator j = NodeList::Begin(); j != NodeList::End(); ++j) {
-            //     Ptr<Node> dest_node = *j;
-            //     if (dest_node->GetId() == DestinationID) {
-            //         Ptr<Ipv4> destAddr = dest_node->GetObject<Ipv4>();
-            //         // destAddr = rtr->GetRouterId();
-            //     }
-            // }
-            // for (const auto &addrPair : m_nodeList) {
-            //     Ptr<Node> node = *i;
-            //     Ptr<GlobalRouter> rtr = node->GetObject<GlobalRouter>();
-            //     if (rtr && rtr->GetRouterId() == DestinationID) {
-            //         destAddr = addrPair.first;
-            //         found = true;
-            //         NS_LOG_LOGIC("    Found destination address " << destAddr << " for node ID " << DestinationID);
-            //         break;
-            //     }
-            // }
-            // if (!found) {
-            //     NS_LOG_WARN("Destination node ID " << DestinationID << " not found in node list, skipping...");
-            //     continue;
-            // }
             antRouting->InitializeRoutingTable(m_nodeList, m_neighbourAdjList[node], 1, DestinationAddress);
+        } else {
+            NS_LOG_LOGIC("    Initializing normal routing table for node ID " << node->GetId());
+            NS_LOG_LOGIC("    This node is not sending ants.");
+            antRouting->InitializeRoutingTable(m_nodeList, m_neighbourAdjList[node], 0);
+        }
+    }
+}
+
+void 
+Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourcesAndDestinations(
+    const std::map<int, std::vector<Ipv4Address>>& sourceDestMap)
+{
+    int num_nodes = NodeList::GetNNodes();
+    Ipv4AntNetRoutingTableEntry::Nk = num_nodes;
+
+    // ソースノードセットを作る（検索高速化用）
+    std::set<int> sourceSet;
+    for (const auto& pair : sourceDestMap) {
+        sourceSet.insert(pair.first);
+    }
+
+    for (auto i = NodeList::Begin(); i != NodeList::End(); ++i) {
+        Ptr<Node> node = *i;
+
+        NS_LOG_LOGIC("Initializing routing table for node " << node->GetId());
+
+        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+        if (!ipv4) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4 object, skipping...");
+            continue;
+        }
+
+        Ptr<Ipv4RoutingProtocol> routing = ipv4->GetRoutingProtocol();
+        if (!routing) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4RoutingProtocol object, skipping...");
+            continue;
+        }
+
+        Ptr<Ipv4AntNetRouting> antRouting = routing->GetObject<Ipv4AntNetRouting>();
+        if (!antRouting) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4AntNetRouting object, skipping...");
+            continue;
+        }
+
+        if (sourceSet.find(node->GetId()) != sourceSet.end()) {
+            NS_LOG_LOGIC("    Initializing routing table for node ID " << node->GetId() << " to send ants.");
+
+            const std::vector<Ipv4Address>& destList = sourceDestMap.at(node->GetId());
+            for (auto dest : destList) {
+                NS_LOG_LOGIC("        Destination: " << dest);
+                // ここでは1つずつ初期化する。必要に応じて antRouting 内で複数宛先をまとめて初期化可能
+                antRouting->InitializeRoutingTable(m_nodeList, m_neighbourAdjList[node], 1, dest);
+            }
         } else {
             NS_LOG_LOGIC("    Initializing normal routing table for node ID " << node->GetId());
             NS_LOG_LOGIC("    This node is not sending ants.");

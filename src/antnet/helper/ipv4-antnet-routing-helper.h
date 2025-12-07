@@ -34,6 +34,7 @@ class Ipv4AntNetRoutingHelper : public Ipv4RoutingHelper
         static void InitializeNodeRoutingTables();
 
         static void InitializeNodeRoutingTablesForSpecificSourceAndDestination(int SourceID, Ipv4Address DestinationAddress);
+        static void InitializeNodeRoutingTablesForSpecificSourcesAndDestinations(const std::map<int, std::vector<Ipv4Address>>& sourceDestMap);
 
         static void PrintRoutingTables();
 

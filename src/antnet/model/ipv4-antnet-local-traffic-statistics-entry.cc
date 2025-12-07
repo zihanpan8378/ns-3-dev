@@ -32,27 +32,53 @@ Ipv4AntNetLocalTrafficStatisticsEntry::ToString() const
     return oss.str();
 }
 
+// void Ipv4AntNetLocalTrafficStatisticsEntry::UpdateStatistics(double delayMs) {
+//     double delta;
+//     // Update mean delay using exponential moving average
+//     if (m_meanDelay <= 0.0) {
+//         m_meanDelay = delayMs;
+//         delta = 0.0;
+//     } else {
+//         delta = delayMs - m_meanDelay;
+//         m_meanDelay = m_meanDelay + ETA * delta;
+//     }
+
+//     m_delayVariance = m_delayVariance + ETA * ((delta * delta) - m_delayVariance);
+//     if (m_delayVariance < 0.0) {
+//         m_delayVariance = 0.0; // Prevent negative variance due to numerical errors
+//     }
+
+//     // Update window delays
+//     if (m_delayWindow.size() >= MAX_WINDOW_SIZE) {
+//         m_delayWindow.pop_front();
+//     }
+//     m_delayWindow.push_back(delayMs);
+//     NS_LOG_INFO("Updated statistics for destination " << m_dest << ": delay=" << delayMs << "ms, mean delay=" << m_meanDelay << "ms, variance=" << m_delayVariance << "ms^2");
+// }
 void Ipv4AntNetLocalTrafficStatisticsEntry::UpdateStatistics(double delayMs) {
-    double delta;
-    // Update mean delay using exponential moving average
-    if (m_meanDelay <= 0.0) {
+
+    if (!m_initialized) {
         m_meanDelay = delayMs;
-        delta = 0.0;
-    } else {
-        delta = delayMs - m_meanDelay;
-        m_meanDelay = m_meanDelay + ETA * delta;
+        m_delayVariance = 0.0;
+        m_initialized = true;
+        return;
     }
 
-    m_delayVariance = m_delayVariance + ETA * ((delta * delta) - m_delayVariance);
-    if (m_delayVariance < 0.0) {
-        m_delayVariance = 0.0; // Prevent negative variance due to numerical errors
-    }
+    double oldMean = m_meanDelay;
 
-    // Update window delays
+    // update mean
+    m_meanDelay = oldMean + ETA * (delayMs - oldMean);
+
+    // update variance (EMA of (x - newMean)^2)
+    double diff = delayMs - m_meanDelay;
+    m_delayVariance = (1 - ETA) * m_delayVariance + ETA * diff * diff;
+
+    // window update
     if (m_delayWindow.size() >= MAX_WINDOW_SIZE) {
         m_delayWindow.pop_front();
     }
     m_delayWindow.push_back(delayMs);
+    
     NS_LOG_INFO("Updated statistics for destination " << m_dest << ": delay=" << delayMs << "ms, mean delay=" << m_meanDelay << "ms, variance=" << m_delayVariance << "ms^2");
 }
 

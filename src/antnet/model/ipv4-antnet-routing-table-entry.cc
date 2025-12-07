@@ -214,7 +214,7 @@ Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address nextHop, double delayMi
 
     double reward = C1 * (bestDelay / (delayMillisecond + 1e-6)) + C2 * ((iSup - iInf) / ((iSup - iInf) + (delayMillisecond + 1e-6 - iInf))); // Avoid division by zero
 
-    double a = 5.0;
+    double a = 7.0;
     double sr = 1.0 / (1.0 + std::exp(a / (reward*Nk))); // Sigmoid function to bound reward between 0 and 1
     double s1 = 1.0 / (1.0 + std::exp(a / Nk));
     reward = sr/s1; // Normalize to [0, 1]

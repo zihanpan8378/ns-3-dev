@@ -41,8 +41,7 @@ using namespace ns3;
                     |                                   C7
                     |                                    |
         10.1.9.1/24 |                                    | 10.1.7.2/24
-              [R6: 0.0.0.6] ----------C8--------- [R5: 0.0.0.5]
-                      10.1.8.2/24           10.1.8.1/24
+              [R6: 0.0.0.6]                      [R5: 0.0.0.5]
 
     C1: P2P channel, 10.1.1.0/24, R0 - R1
     C2: P2P channel, 10.1.2.0/24, R0 - R2
@@ -73,7 +72,7 @@ main(int argc, char* argv[])
     // Set up some default values for the simulation.  Use the
     Config::SetDefault("ns3::OnOffApplication::PacketSize", UintegerValue(512));
     Config::SetDefault("ns3::OnOffApplication::DataRate", StringValue("448kb/s"));
-    Config::SetDefault("ns3::Ipv4AntNetRouting::ForwardAntInterval", TimeValue(Seconds(1.0)));
+    Config::SetDefault("ns3::Ipv4AntNetRouting::ForwardAntInterval", TimeValue(Seconds(0.3)));
     Config::SetDefault("ns3::Ipv4AntNetRouting::UseBeaconWindow", BooleanValue(false));
     Config::SetDefault("ns3::Ipv4AntNetRouting::UseFailureMessagePropagation", BooleanValue(false));
 
@@ -93,7 +92,7 @@ main(int argc, char* argv[])
     NodeContainer n2n4 = NodeContainer(c.Get(2), c.Get(4));
     NodeContainer n3n4 = NodeContainer(c.Get(3), c.Get(4));
     NodeContainer n4n5 = NodeContainer(c.Get(4), c.Get(5));
-    NodeContainer n5n6 = NodeContainer(c.Get(5), c.Get(6));
+    // NodeContainer n5n6 = NodeContainer(c.Get(5), c.Get(6));
     NodeContainer n6n7 = NodeContainer(c.Get(6), c.Get(7));
 
     InternetStackHelper internet;
@@ -114,7 +113,7 @@ main(int argc, char* argv[])
     NetDeviceContainer d2d4 = p2p.Install(n2n4);
     NetDeviceContainer d3d4 = p2p.Install(n3n4);
     NetDeviceContainer d4d5 = p2p.Install(n4n5);
-    NetDeviceContainer d5d6 = p2p.Install(n5n6);
+    // NetDeviceContainer d5d6 = p2p.Install(n5n6);
     NetDeviceContainer d6d7 = p2p.Install(n6n7);
 
     // Assign IP addresses
@@ -142,15 +141,31 @@ main(int argc, char* argv[])
     ipv4.SetBase("10.1.7.0", "255.255.255.0");
     Ipv4InterfaceContainer i4i5 = ipv4.Assign(d4d5);
 
-    ipv4.SetBase("10.1.8.0", "255.255.255.0");
-    Ipv4InterfaceContainer i5i6 = ipv4.Assign(d5d6);
+    // ipv4.SetBase("10.1.8.0", "255.255.255.0");
+    // Ipv4InterfaceContainer i5i6 = ipv4.Assign(d5d6);
 
     ipv4.SetBase("10.1.9.0", "255.255.255.0");
     Ipv4InterfaceContainer i6i7 = ipv4.Assign(d6d7);
 
     // Create routing tables
     Ipv4AntNetRoutingHelper::BuildAntNetTopology();
-    Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourceAndDestination(0,Ipv4Address("10.1.7.2"));
+
+
+    std::map<int, std::vector<ns3::Ipv4Address>> sourceDestMap;
+
+    // ノードID 2 から送る宛先
+    sourceDestMap[0] = { ns3::Ipv4Address("10.1.7.2") };
+    sourceDestMap[1] = { ns3::Ipv4Address("10.1.7.2") };
+    sourceDestMap[2] = { ns3::Ipv4Address("10.1.7.2") };
+    sourceDestMap[3] = { ns3::Ipv4Address("10.1.7.2") };
+    sourceDestMap[4] = { ns3::Ipv4Address("10.1.7.2") };
+    sourceDestMap[5] = { ns3::Ipv4Address("10.1.7.2") };
+    sourceDestMap[6] = { ns3::Ipv4Address("10.1.7.2") };
+
+    // 初期化関数を呼び出す
+    Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourcesAndDestinations(sourceDestMap);
+
+    // Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourceAndDestination(0,Ipv4Address("10.1.7.2"));
 
     // Print Initial Routing Tables
     // NS_LOG_INFO("Initial Routing Tables:");
@@ -172,12 +187,12 @@ main(int argc, char* argv[])
 
     // for record
     // Simulator::Schedule(Seconds(1.0), &Ipv4AntNetRouting::PrintPheromonesCsv, this, stream);
-    Ipv4AntNetRoutingHelper::ScheduleCsvLogging(1.0, "log/pheromones/");
+    Ipv4AntNetRoutingHelper::ScheduleCsvLogging(0.3, "src/antnet/log/pheromones/");
 
 
     // Run Simulation
     NS_LOG_INFO("Run Simulation.");
-    Simulator::Stop(Seconds(10.0));
+    Simulator::Stop(Seconds(500.0));
     Simulator::Run();
 
     // Print Final Routing Tables
