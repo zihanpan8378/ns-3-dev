@@ -73,7 +73,7 @@ main(int argc, char* argv[])
     // Set up some default values for the simulation.  Use the
     Config::SetDefault("ns3::OnOffApplication::PacketSize", UintegerValue(512));
     Config::SetDefault("ns3::OnOffApplication::DataRate", StringValue("448kb/s"));
-    Config::SetDefault("ns3::Ipv4AntNetRouting::ForwardAntInterval", TimeValue(Seconds(5.0)));
+    Config::SetDefault("ns3::Ipv4AntNetRouting::ForwardAntInterval", TimeValue(Seconds(1.0)));
     Config::SetDefault("ns3::Ipv4AntNetRouting::UseBeaconWindow", BooleanValue(false));
     Config::SetDefault("ns3::Ipv4AntNetRouting::UseFailureMessagePropagation", BooleanValue(false));
 
@@ -150,11 +150,11 @@ main(int argc, char* argv[])
 
     // Create routing tables
     Ipv4AntNetRoutingHelper::BuildAntNetTopology();
-    Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourceAndDestination(0,Ipv4Address("10.1.8.2"));
+    Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourceAndDestination(0,Ipv4Address("10.1.7.2"));
 
     // Print Initial Routing Tables
-    NS_LOG_INFO("Initial Routing Tables:");
-    Ipv4AntNetRoutingHelper::PrintRoutingTables();
+    // NS_LOG_INFO("Initial Routing Tables:");
+    // Ipv4AntNetRoutingHelper::PrintRoutingTables();
 
 
     // for packet sending
@@ -169,6 +169,10 @@ main(int argc, char* argv[])
     // ApplicationContainer apps = onoff.Install(c.Get(0));
     // apps.Start(Seconds(30.0));
     // apps.Stop(Seconds(200.0));
+
+    // for record
+    // Simulator::Schedule(Seconds(1.0), &Ipv4AntNetRouting::PrintPheromonesCsv, this, stream);
+    Ipv4AntNetRoutingHelper::ScheduleCsvLogging(1.0, "log/pheromones/");
 
 
     // Run Simulation

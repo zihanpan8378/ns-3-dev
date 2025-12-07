@@ -52,7 +52,6 @@ class Ipv4AntNetRoutingTableEntry
          * @return String representation of this route
          */
         std::string ToString() const;
-
         
         /**
          * @return The IPv4 address of the destination of this route

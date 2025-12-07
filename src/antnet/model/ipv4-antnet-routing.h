@@ -62,6 +62,9 @@ class Ipv4AntNetRouting : public Ipv4RoutingProtocol
         void PrintRoutingTable(Ptr<OutputStreamWrapper> stream,
                                Time::Unit unit = Time::S) const override;
 
+        void PrintPheromonesCsvHeader(Ptr<OutputStreamWrapper> stream) const;
+        void PrintPheromonesCsv(Ptr<OutputStreamWrapper> stream) const;
+
         /**
          * @brief Initialize the routing table with the given list of possible destinations and their neighbours
          * Initial pheromone values will be set equally for all neighbours

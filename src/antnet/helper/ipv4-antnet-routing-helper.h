@@ -36,6 +36,9 @@ class Ipv4AntNetRoutingHelper : public Ipv4RoutingHelper
         static void InitializeNodeRoutingTablesForSpecificSourceAndDestination(int SourceID, Ipv4Address DestinationAddress);
 
         static void PrintRoutingTables();
+
+        static void ScheduleCsvLogging(double interval, std::string prefix);
+        static void DoCsvLogging(double interval, std::string prefix);
         
     private:
         static std::map<ns3::Ptr<ns3::Node>, std::list<std::pair<Ipv4Address, Ipv4Address>>> m_neighbourAdjList;

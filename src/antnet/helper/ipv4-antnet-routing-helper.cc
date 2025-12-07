@@ -81,7 +81,7 @@ Ipv4AntNetRoutingHelper::BuildAntNetTopology()
             GlobalRoutingLSA* lsa = new GlobalRoutingLSA();
             rtr->GetLSA(j, *lsa);
 
-            lsa->Print(std::cout);
+            // lsa->Print(std::cout);
 
             // For Router LSAs that are not originated by this router and other types of LSAs, skip them
             if (lsa->GetLSType () != GlobalRoutingLSA::RouterLSA || lsa->GetAdvertisingRouter () != rtr->GetRouterId ()) {
@@ -315,5 +315,62 @@ Ipv4AntNetRoutingHelper::PrintRoutingTables()
         antRouting->PrintRoutingTable(stream, Time::S);
     }
 }
+
+
+void
+Ipv4AntNetRoutingHelper::ScheduleCsvLogging(double interval, std::string prefix)
+{
+    Simulator::Schedule(
+        Seconds(interval),
+        &Ipv4AntNetRoutingHelper::DoCsvLogging,
+        interval,
+        prefix);
+}
+
+void
+Ipv4AntNetRoutingHelper::DoCsvLogging(double interval, std::string prefix)
+{
+    for (auto it = NodeList::Begin(); it != NodeList::End(); ++it)
+    {
+        Ptr<Node> node = *it;
+
+        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+        if (!ipv4)
+            continue;
+
+        Ptr<Ipv4RoutingProtocol> rp = ipv4->GetRoutingProtocol();
+        if (!rp)
+            continue;
+
+        Ptr<Ipv4AntNetRouting> ant = rp->GetObject<Ipv4AntNetRouting>();
+        if (!ant)
+            continue;
+
+        // CSVファイル名
+        std::ostringstream fname;
+        fname << prefix << "_node_" << node->GetId() << ".csv";
+
+        bool needHeader = !std::ifstream(fname.str()).good();
+
+        Ptr<OutputStreamWrapper> stream =
+            ns3::Create<OutputStreamWrapper>(fname.str(), std::ios::app);
+
+        if (needHeader)
+        {
+            ant->PrintPheromonesCsvHeader(stream);
+        }
+
+        ant->PrintPheromonesCsv(stream);
+    }
+
+    // 再スケジュール
+    Simulator::Schedule(
+        Seconds(interval),
+        &Ipv4AntNetRoutingHelper::DoCsvLogging,
+        interval,
+        prefix);
+}
+
+
 
 } // namespace ns3

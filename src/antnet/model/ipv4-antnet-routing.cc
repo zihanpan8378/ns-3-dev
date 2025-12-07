@@ -120,6 +120,7 @@ Ipv4AntNetRouting::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit
     NS_LOG_FUNCTION(this << stream);
 
     *stream->GetStream() << "AntNet Routing Table and Local Traffic Stat for Node " << m_ipv4->GetObject<Node>()->GetId() << std::endl;
+    *stream->GetStream() << "current time (sec): " << Simulator::Now().GetSeconds() << std::endl;
     *stream->GetStream() << "    Routing Table Entries:" << std::endl;
     *stream->GetStream() << "        --------------------------------------------------------" << std::endl;
     for (const auto& entry : m_routingTable) {
@@ -151,6 +152,77 @@ Ipv4AntNetRouting::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit
     }
     
     *stream->GetStream() << std::endl;
+}
+
+
+// void
+// Ipv4AntNetRouting::PrintPheromonesCsvHeader(Ptr<OutputStreamWrapper> stream) const
+// {
+//     std::ostream* os = stream->GetStream();
+
+//     *os << "time,node";
+
+//     // 各 destination に対応する interface 列を追加
+//     for (const auto& entry : m_routingTable)
+//     {
+//         Ipv4Address dest = entry.GetDestAddr();
+//         uint32_t mask = entry.GetDestMask().GetPrefixLength();
+
+//         for (const auto& pheromoneEntry : entry.GetPheromoneList())
+//         {
+//             uint32_t iface = pheromoneEntry.first.second;
+//             *os << "," << dest << "/" << mask << "-if" << iface;
+//         }
+//     }
+
+//     *os << "\n";
+// }
+void
+Ipv4AntNetRouting::PrintPheromonesCsvHeader(Ptr<OutputStreamWrapper> stream) const
+{
+    std::ostream* os = stream->GetStream();
+    *os << "time,node";
+
+    for (const auto& entry : m_routingTable)
+    {
+        Ipv4Address dest = entry.GetDestAddr();
+        uint32_t mask = entry.GetDestMask().GetPrefixLength();
+
+        for (const auto& pheromoneEntry : entry.GetPheromoneList())
+        {
+            uint32_t ifaceIndex = pheromoneEntry.first.second;
+            Ipv4Address ifaceAddr = m_ipv4->GetAddress(ifaceIndex, 0).GetLocal(); // これでインターフェースのIPを取得
+            *os << "," << dest << "/" << mask << "-" << ifaceAddr;
+        }
+    }
+
+    *os << "\n";
+}
+
+
+void
+Ipv4AntNetRouting::PrintPheromonesCsv(Ptr<OutputStreamWrapper> stream) const
+{
+    std::ostream* os = stream->GetStream();
+
+    double now = Simulator::Now().GetSeconds();
+    uint32_t nodeId = m_ipv4->GetObject<Node>()->GetId();
+
+    *os << now << "," << nodeId;
+
+    // 全 dest × iface に対して値を書き込む
+    for (const auto& entry : m_routingTable)
+    {
+        const auto& pheros = entry.GetPheromoneList();
+
+        for (const auto& kv : pheros)
+        {
+            double p = kv.second;
+            *os << "," << p;
+        }
+    }
+
+    *os << "\n";
 }
 
 
@@ -538,9 +610,10 @@ void Ipv4AntNetRouting::ScheduleForwardAnt() {
         if (deterministic) {
             // Send forward ant to specific destination
             Ipv4Address specificDest = m_specificDestination;
+            NS_LOG_INFO("Deterministic ants enabled. Sending forward ant to " << specificDest);
             SendForwardAnt(specificDest);
             NS_LOG_INFO("Node "<< m_ipv4->GetObject<Node>()->GetId() << " Send deterministic forward ant to " << specificDest);
-            return;
+            // return;
         }
         else {
             double sum_weights = 0.0;
@@ -559,7 +632,9 @@ void Ipv4AntNetRouting::ScheduleForwardAnt() {
             }
         }
     }
-
+    NS_LOG_INFO("current time: " << Simulator::Now().GetSeconds() << " seconds.");
+    NS_LOG_INFO("next forward ant scheduled at: " << (Simulator::Now() + m_forwardAntInterval).GetSeconds() << " seconds.");
+    NS_LOG_INFO("forward ant interval: " << m_forwardAntInterval.GetSeconds() << " seconds.");
     m_forwardAntEvent = Simulator::Schedule(
         m_forwardAntInterval,
         &Ipv4AntNetRouting::ScheduleForwardAnt,
@@ -667,6 +742,7 @@ void Ipv4AntNetRouting::InitializeRoutingTable(
     }
     else if (ant_send_mode == 1) {
         NS_LOG_INFO("Ant send mode is 1, sending forward ants deterministically to specific destination.");
+        NS_LOG_INFO("forward ant interval: " << m_forwardAntInterval.GetSeconds() << " seconds.");
         SetDeterministicAnts(true);
         SetSpecificDestination(specificDestination);
         m_forwardAntEvent = Simulator::Schedule(
