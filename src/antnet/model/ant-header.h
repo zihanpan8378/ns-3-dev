@@ -52,6 +52,7 @@ class AntHeader : public Header
         uint32_t m_sourceNodeId;
         Ipv4Address m_sourceAddress;
         Ipv4Address m_destinationAddress;
+        std::list<Ipv4Address> m_destinationAlternativeAddresses;
         uint32_t m_round;
 
     public:
@@ -117,6 +118,10 @@ class AntHeader : public Header
         const std::vector<AntHeaderStackEntry>& GetForwardStack() const;
 
         const std::vector<AntHeaderStackEntry>& GetBackwardStack() const;
+
+        void AddDestinationAlternativeAddress(Ipv4Address addr);
+
+        std::list<Ipv4Address> GetDestinationAlternativeAddresses() const;
 };
 
 } // namespace ns3

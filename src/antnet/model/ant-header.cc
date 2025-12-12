@@ -48,6 +48,7 @@ AntHeader::AntHeader(
     m_sourceNodeId(sourceNodeId),
     m_sourceAddress(source),
     m_destinationAddress(destination),
+    m_destinationAlternativeAddresses(),
     m_round(round)
 {
 }
@@ -65,18 +66,21 @@ AntHeader::GetSerializedSize() const
 {
     // 1 byte for type + 4 bytes for stack size * 2 for two stacks + (4 bytes for node ID + 4 bytes for IP + 8 bytes for time) per entry
     uint32_t typeSize = 1;
-    uint32_t stackSize = 4;
+    uint32_t stackSizeSize = 4;
     uint32_t stackEntrySize = 4 + 4 + 4 + 8;
     uint32_t sourceNodeIdSize = 4;
     uint32_t addressSize = 4;
     uint32_t roundSize = 4;
+    uint32_t destinationAddrListSize = 4;
 
     uint32_t totalSize = typeSize
-                         + stackSize * 2
+                         + stackSizeSize * 2
                          + (m_forwardStack.size() + m_backwardStack.size()) * stackEntrySize
                          + sourceNodeIdSize
                          + addressSize * 2
-                         + roundSize;
+                         + roundSize
+                         + destinationAddrListSize
+                         + m_destinationAlternativeAddresses.size() * addressSize;
     return totalSize;
 }
 
@@ -114,6 +118,11 @@ AntHeader::Serialize(Buffer::Iterator start) const
         // Serialize time
         int64_t t = m_backwardStack[i].GetTime().GetNanoSeconds ();
         start.WriteHtonU64 (static_cast<uint64_t>(t));
+    }
+
+    start.WriteHtonU32(m_destinationAlternativeAddresses.size());
+    for (const auto& addr : m_destinationAlternativeAddresses) {
+        start.WriteHtonU32(addr.Get());
     }
 
     // Serialize source node ID
@@ -187,6 +196,14 @@ AntHeader::Deserialize(Buffer::Iterator start)
         );
     }
 
+    // Deserialize alternative destination addresses
+    m_destinationAlternativeAddresses.clear();
+    uint32_t altAddrCount = start.ReadNtohU32();
+    for (uint32_t i = 0; i < altAddrCount; ++i) {
+        uint32_t altIpInt = start.ReadNtohU32();
+        m_destinationAlternativeAddresses.push_back(Ipv4Address(altIpInt));
+    }
+
     // Deserialize source node ID
     m_sourceNodeId = start.ReadNtohU32();
 
@@ -202,7 +219,7 @@ AntHeader::Deserialize(Buffer::Iterator start)
     m_round = start.ReadNtohU32();
 
     // Return total size consumed
-    return 1 + 4 * 2 + (forwardStackSize + backwardStackSize) * (4 + 4 + 8) + 4 + 4 * 2 + 4;
+    return 1 + 4 * 2 + (forwardStackSize + backwardStackSize) * (4 + 4 + 8) + 4 + 4 * 2 + 4 + 4 + altAddrCount * 4;
 }
 
 void
@@ -224,6 +241,16 @@ AntHeader::Print(std::ostream& os) const
     os << "sourceNodeId=" << m_sourceNodeId << ", ";
     os << "sourceAddress=" << m_sourceAddress << ", ";
     os << "destinationAddress=" << m_destinationAddress << ", ";
+    if (m_type == BACKWARD_ANT) {
+        os << "destinationAlternativeAddresses=[";
+        for (auto it = m_destinationAlternativeAddresses.begin(); it != m_destinationAlternativeAddresses.end(); ++it) {
+            os << *it;
+            if (std::next(it) != m_destinationAlternativeAddresses.end()) {
+                os << ", ";
+            }
+        }
+        os << "], ";
+    }
     os << "round=" << m_round << "]\n";
 
     if (type == FORWARD_ANT || type == BACKWARD_ANT) {
@@ -317,6 +344,20 @@ void
 AntHeader::SetAntType(AntHeader::Type type)
 {
     m_type = type;
+}
+
+void
+AntHeader::AddDestinationAlternativeAddress(Ipv4Address addr)
+{
+    if (std::find(m_destinationAlternativeAddresses.begin(), m_destinationAlternativeAddresses.end(), addr) == m_destinationAlternativeAddresses.end()) {
+        m_destinationAlternativeAddresses.push_back(addr);
+    }
+}
+
+std::list<Ipv4Address>
+AntHeader::GetDestinationAlternativeAddresses() const
+{
+    return m_destinationAlternativeAddresses;
 }
 
 AntHeader::Type

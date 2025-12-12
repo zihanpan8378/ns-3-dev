@@ -16,7 +16,8 @@ Ipv4AntNetLocalTrafficStatisticsEntry::Ipv4AntNetLocalTrafficStatisticsEntry(Ipv
       m_dataFlowMeasure(1.0),
       m_meanDelay(0.0),
       m_delayVariance(0.0),
-      m_delayWindow({})
+      m_delayWindow({}),
+      m_receivedSamplesCount(0)
 {
 }
 
@@ -27,12 +28,15 @@ Ipv4AntNetLocalTrafficStatisticsEntry::ToString() const
     oss << "destination=" << m_dest << "/" << m_destNetworkMask.GetPrefixLength() << ", "
         << "data flow measure=" << m_dataFlowMeasure << ", "
         << "mean delay=" << m_meanDelay << "ms, "
-        << "delay variance=" << m_delayVariance << "ms^2"
+        << "delay variance=" << m_delayVariance << "ms^2, "
+        << "received samples count=" << m_receivedSamplesCount
         << std::endl;
     return oss.str();
 }
 
 void Ipv4AntNetLocalTrafficStatisticsEntry::UpdateStatistics(double delayMs) {
+    m_receivedSamplesCount += 1;
+
     // Update mean delay using exponential moving average
     if (m_meanDelay <= 0.0) {
         m_meanDelay = delayMs;

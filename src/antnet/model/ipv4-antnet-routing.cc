@@ -291,6 +291,16 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
                 antHeader.SetAntType(AntHeader::Type::BACKWARD_ANT);
                 antHeader.PopForwardStackEntryToBackwardStack(); // Move destination from forward to backward stack
 
+                // Get all interface addresses for this node
+                for (uint32_t i = 0; i < m_ipv4->GetNInterfaces(); ++i) {
+                    for (uint32_t j = 0; j < m_ipv4->GetNAddresses(i); ++j) {
+                        Ipv4Address addr = m_ipv4->GetAddress(i, j).GetLocal();
+                        if (addr != Ipv4Address() && addr != Ipv4Address("127.0.0.1")) {
+                            antHeader.AddDestinationAlternativeAddress(addr);
+                        }
+                    }
+                }
+
                 // Send backward ant to next hop
                 AntHeader::AntHeaderStackEntry nextHop = antHeader.PopForwardStackEntryToBackwardStack(); // Get next hop and move it to backward stack
                 Ipv4Address nextHopAddr = nextHop.GetAddressOut();
@@ -352,57 +362,63 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             Ipv4Address antDestinationAddr = antDestinationEntry.GetAddressIn();
             Time antDestinationTime = antDestinationEntry.GetTime();
             Time delay = antDestinationTime - backwardStack.back().GetTime();
+            (void)antDestinationAddr; // To avoid unused variable warning
+
+            std::list<Ipv4Address> antDestinationAddresses = antHeader.GetDestinationAlternativeAddresses();
             
-            // Update statistics for destination
-            Ipv4AntNetLocalTrafficStatisticsEntry* trafficEntry = FindLocalTrafficStatisticsEntry(antDestinationAddr);
-            if (trafficEntry) {
-                // Call the traffic stat entry's update method
-                // trafficEntry->AddDataFlowMeasure();
-                trafficEntry->UpdateStatistics(delay.GetMilliSeconds());
-                NS_LOG_LOGIC("Updated local traffic statistics for destination " << antDestinationAddr);
-            } else {
-                NS_LOG_ERROR("No local traffic statistics entry found for destination " << antDestinationAddr);
-                return false;
-            }
-            
-            // Update routing table pheromones for destination
-            Ipv4Address nextForwardHopAddr = backwardStack[backwardStack.size() - 2].GetAddressIn();
-            Ipv4AntNetRoutingTableEntry* routeEntry = FindRoutingTableEntry(antDestinationAddr);
-            if (routeEntry) {
-                // Call the routing table entry's pheromone update method
-                routeEntry->UpdatePheromone(nextForwardHopAddr, delay.GetMilliSeconds(), *trafficEntry);
-                NS_LOG_LOGIC("Updated routing table pheromones for destination " << antDestinationAddr);
-            } else {
-                NS_LOG_ERROR("No routing table entry found for destination " << antDestinationAddr);
-                return false;
-            }
-            
-            // Check if a subpath route is good enough
-            // For good subpath, also update pheromones for the corresponding destination
-            if (backwardStack.size() > 2) {
-                for (size_t idx = backwardStack.size() - 2; idx > 0; --idx) {
-                    Ipv4Address subpathDest = backwardStack[idx].GetAddressIn();
-                    Time subpathDelay = backwardStack[idx].GetTime() - backwardStack.back().GetTime();
-                    double delayMs = (subpathDelay).GetMilliSeconds();
-                    Ipv4AntNetLocalTrafficStatisticsEntry* subPathTrafficEntry = FindLocalTrafficStatisticsEntry(subpathDest);
-                    if (subPathTrafficEntry) {
-                        if (delayMs <= subPathTrafficEntry->GetUpperBoundDelayFromWindow()) {
-                            NS_LOG_LOGIC("Subpath to " << subpathDest << " is good enough with delay " << delayMs << " ms, updating pheromone");
-                            Ipv4AntNetRoutingTableEntry* subpathRouteEntry = FindRoutingTableEntry(subpathDest);
-                            if (subpathRouteEntry) {
-                                subpathRouteEntry->UpdatePheromone(nextForwardHopAddr, delayMs, *subPathTrafficEntry);
-                                NS_LOG_LOGIC("Updated routing table pheromones for subpath destination " << subpathDest);
-                            } else {
-                                NS_LOG_ERROR("No routing table entry found for subpath destination " << subpathDest);
-                                return false;
-                            }
-                        }
-                    } else {
-                        NS_LOG_ERROR("No local traffic statistics entry found for subpath destination " << subpathDest);
-                        return false;
-                    }
+            for (const auto& addr : antDestinationAddresses) {
+                // Update statistics for destination
+                Ipv4AntNetLocalTrafficStatisticsEntry* trafficEntry = FindLocalTrafficStatisticsEntry(addr);
+                if (trafficEntry) {
+                    // Call the traffic stat entry's update method
+                    // trafficEntry->AddDataFlowMeasure();
+                    trafficEntry->UpdateStatistics(delay.GetMilliSeconds());
+                    NS_LOG_LOGIC("Updated local traffic statistics for destination " << addr);
+                } else {
+                    NS_LOG_ERROR("No local traffic statistics entry found for destination " << addr);
+                    return false;
+                }
+                
+                // Update routing table pheromones for destination
+                Ipv4Address nextForwardHopAddr = backwardStack[backwardStack.size() - 2].GetAddressIn();
+                Ipv4AntNetRoutingTableEntry* routeEntry = FindRoutingTableEntry(addr);
+                if (routeEntry) {
+                    // Call the routing table entry's pheromone update method
+                    routeEntry->UpdatePheromone(nextForwardHopAddr, delay.GetMilliSeconds(), *trafficEntry);
+                    NS_LOG_LOGIC("Updated routing table pheromones for destination " << addr);
+                } else {
+                    NS_LOG_ERROR("No routing table entry found for destination " << addr);
+                    return false;
                 }
             }
+            
+            // // Let's remove this part for simplicity
+            // // Check if a subpath route is good enough
+            // // For good subpath, also update pheromones for the corresponding destination
+            // if (backwardStack.size() > 2) {
+            //     for (size_t idx = backwardStack.size() - 2; idx > 0; --idx) {
+            //         Ipv4Address subpathDest = backwardStack[idx].GetAddressIn();
+            //         Time subpathDelay = backwardStack[idx].GetTime() - backwardStack.back().GetTime();
+            //         double delayMs = (subpathDelay).GetMilliSeconds();
+            //         Ipv4AntNetLocalTrafficStatisticsEntry* subPathTrafficEntry = FindLocalTrafficStatisticsEntry(subpathDest);
+            //         if (subPathTrafficEntry) {
+            //             if (delayMs <= subPathTrafficEntry->GetUpperBoundDelayFromWindow()) {
+            //                 NS_LOG_LOGIC("Subpath to " << subpathDest << " is good enough with delay " << delayMs << " ms, updating pheromone");
+            //                 Ipv4AntNetRoutingTableEntry* subpathRouteEntry = FindRoutingTableEntry(subpathDest);
+            //                 if (subpathRouteEntry) {
+            //                     subpathRouteEntry->UpdatePheromone(nextForwardHopAddr, delayMs, *subPathTrafficEntry);
+            //                     NS_LOG_LOGIC("Updated routing table pheromones for subpath destination " << subpathDest);
+            //                 } else {
+            //                     NS_LOG_ERROR("No routing table entry found for subpath destination " << subpathDest);
+            //                     return false;
+            //                 }
+            //             }
+            //         } else {
+            //             NS_LOG_ERROR("No local traffic statistics entry found for subpath destination " << subpathDest);
+            //             return false;
+            //         }
+            //     }
+            // }
 
             // Check if reached source by looking if forward stack is empty
             if (antHeader.GetForwardStack().empty()) {
