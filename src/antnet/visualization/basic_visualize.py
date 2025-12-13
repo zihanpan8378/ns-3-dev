@@ -64,6 +64,7 @@ ip_to_node = {
     "10.1.9.2": 6,
 }
 
+
 # ノードの座標
 pos = {
     0: (0,  3),
@@ -122,6 +123,8 @@ df = pd.concat(df_list, ignore_index=True)
 
 cols = [c for c in df.columns if c.startswith(dest_target)]
 times = sorted(df["time"].unique())
+skip = 5
+times = times[::skip]
 all_nodes = sorted(df["node"].unique())
 
 # colsの中身をfor文で確認する
@@ -167,7 +170,7 @@ def update(frame_idx):
     for u, v in G.edges():
         w = pheromone_map.get((u, v), 0.0)
         # print(w)
-        widths.append(max(0.2, w * 6.0))
+        widths.append(max(0.1, w * 6.0))
     # print(widths)
 
     nx.draw_networkx_nodes(G, pos=pos, ax=ax, node_size=900, node_color="lightblue")
@@ -181,10 +184,43 @@ def update(frame_idx):
                            arrowsize=20,
                            connectionstyle='arc3,rad=0.1')
 
-    ax.set_title(f"Pheromone toward {dest_target} — time={t}")
+    x, y = pos[0]
+    ax.text(x + 0.2, y + 0.2, "10.1.1.1", fontsize=12)
+    ax.text(x + 0.2, y - 0.3, "10.1.2.1", fontsize=12)
+    ax.text(x - 0.8, y, "10.1.3.1", fontsize=12)
+    
+    x, y = pos[1]
+    ax.text(x - 0.8, y + 0.2, "10.1.1.2", fontsize=12)
+    ax.text(x + 0.2, y - 0.4, "10.1.4.1", fontsize=12)
+    
+    x, y = pos[2]
+    ax.text(x + 0.2, y + 0.2, "10.1.2.2", fontsize=12)
+    ax.text(x + 0.2, y - 0.2, "10.1.5.1", fontsize=12)
+    
+    x, y = pos[3]
+    ax.text(x + 0.2, y + 0.2, "10.1.4.2", fontsize=12)
+    ax.text(x - 1.0, y - 0.1, "10.1.6.1", fontsize=12)
+    
+    x, y = pos[4]
+    ax.text(x - 0.8, y + 0.2, "10.1.5.2", fontsize=12)
+    ax.text(x + 0.2, y + 0.2, "10.1.6.2", fontsize=12)
+    ax.text(x + 0.2, y - 0.3, "10.1.7.1", fontsize=12)
+    
+    x, y = pos[5]
+    ax.text(x - 0.8, y + 0.2, "10.1.7.2", fontsize=12)
+    
+    x, y = pos[6]
+    ax.text(x + 0.2, y + 0.2, "10.1.9.1", fontsize=12)
+    
+    x, y = pos[7]
+    ax.text(x - 0.4, y + 0.3, "10.1.3.2", fontsize=12)
+    ax.text(x + 0.2, y - 0.2, "10.1.9.2", fontsize=12)
+
+    ax.set_title(f"Pheromone toward {dest_target} — time={t}", fontsize=20)
     ax.axis("off")
 
 ani = animation.FuncAnimation(fig, update, frames=len(times), interval=100, repeat=True)
 
-plt.show()
+# plt.show()
 # ani.save(os.path.join(output_dir, "pheromone_animation.gif"), dpi=150)
+ani.save(os.path.join(output_dir, "pheromone_animation.mp4"), dpi=150)

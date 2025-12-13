@@ -106,6 +106,7 @@ Ipv4AntNetRoutingTableEntry::GetNextHop(std::map<Ipv4Address, double> queueLengt
     PheromoneList adjustedPheromoneList;
     if (queueLengthMap.empty()) {
         adjustedPheromoneList = m_pheromoneList;
+        NS_LOG_INFO("No queue length info provided, using original pheromone values");
     } else {
         double averageQueueLength = 0.0;
         for (const auto& qlenEntry : queueLengthMap) {
@@ -123,6 +124,8 @@ Ipv4AntNetRoutingTableEntry::GetNextHop(std::map<Ipv4Address, double> queueLengt
             if (it != queueLengthMap.end()) {
                 queueLength = it->second;
             }
+            NS_LOG_INFO("Next hop " << nextHopKey.first << " on interface " << nextHopKey.second
+                         << " has queue length " << queueLength << " (average: " << averageQueueLength << ")");
 
             double ln = 1.0 - queueLength / (averageQueueLength + 1e-6); // Avoid division by zero
             double adjustedPheromone = entry.second + (ALPHA * ln) / (1 + ALPHA * (queueLengthMap.size() - 1));
@@ -200,13 +203,26 @@ Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address nextHop, double delayMi
 
     // Assert that nextHop is in m_pheromoneList
     bool found = false;
+    // entry.first.firstを保存する用のベクター
+    std::vector<Ipv4Address> nextHopAddresses;
     for (const auto& entry : m_pheromoneList) {
+        nextHopAddresses.push_back(entry.first.first);
         if (entry.first.first == nextHop) {
             found = true;
             break;
         }
     }
-    NS_ASSERT_MSG(found, "nextHop " << nextHop << " not found in pheromone list");
+    // NS_ASSERT_MSG(found, "nextHop " << nextHop << " not found in pheromone list:" << nextHopAddresses);
+    // ベクタを文字列に変換
+    std::ostringstream oss;
+    for (const auto& addr : nextHopAddresses) {
+        oss << addr << " ";
+    }
+
+    NS_ASSERT_MSG(found,
+                "nextHop " << nextHop
+                << " not found in pheromone list: " << oss.str());
+                
 
     double bestDelay = trafficStat.GetBestDelayFromWindow();
     double iInf = bestDelay;

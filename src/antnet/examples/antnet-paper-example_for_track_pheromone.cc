@@ -5,6 +5,8 @@
 #include "ns3/network-module.h"
 #include "ns3/point-to-point-module.h"
 
+#include "ns3/internet-module.h"
+
 #include "ns3/ipv4-antnet-routing-helper.h"
 
 #include <cassert>
@@ -64,14 +66,16 @@ main(int argc, char* argv[])
 
     // Enable logging
     LogComponentEnable("PaperAntNetExample", LOG_LEVEL_INFO);
-    LogComponentEnable("Ipv4AntNetRoutingHelper", LOG_LEVEL_INFO);
+    // LogComponentEnable("Ipv4AntNetRoutingHelper", LOG_LEVEL_INFO);
     LogComponentEnable("Ipv4AntNetRouting", LOG_LEVEL_INFO);
-    LogComponentEnable("AntHeader", LOG_LEVEL_INFO);
-    LogComponentEnable("Ipv4AntNetLocalTrafficStatisticsEntry", LOG_LEVEL_INFO);
+    // LogComponentEnable("AntHeader", LOG_LEVEL_INFO);
+    // LogComponentEnable("Ipv4AntNetLocalTrafficStatisticsEntry", LOG_LEVEL_INFO);
+    LogComponentEnable("Ipv4AntNetRoutingTableEntry", LOG_LEVEL_INFO);
     
     // Set up some default values for the simulation.  Use the
-    Config::SetDefault("ns3::OnOffApplication::PacketSize", UintegerValue(512));
-    Config::SetDefault("ns3::OnOffApplication::DataRate", StringValue("448kb/s"));
+    // Config::SetDefault("ns3::OnOffApplication::PacketSize", UintegerValue(512));
+    // Config::SetDefault("ns3::OnOffApplication::DataRate", StringValue("10Mbps"));
+    
     Config::SetDefault("ns3::Ipv4AntNetRouting::ForwardAntInterval", TimeValue(Seconds(0.3)));
     Config::SetDefault("ns3::Ipv4AntNetRouting::UseBeaconWindow", BooleanValue(false));
     Config::SetDefault("ns3::Ipv4AntNetRouting::UseFailureMessagePropagation", BooleanValue(false));
@@ -175,19 +179,41 @@ main(int argc, char* argv[])
     // for packet sending
     // uint16_t port = 9000;
 
-    // InetSocketAddress dest = InetSocketAddress(i6i7.GetAddress(0), port);
+    // // OnOff destination
+    // InetSocketAddress dest = InetSocketAddress(i2i4.GetAddress(1), port);
+    // OnOffHelper onoff("ns3::UdpSocketFactory", dest);
 
-    // OnOffHelper onoff("ns3::UdpSocketFactory", dest);  MPIA = 0.3ms
     // onoff.SetAttribute("DataRate", StringValue("2Mbps"));
     // onoff.SetAttribute("PacketSize", UintegerValue(512));
+    // onoff.SetAttribute("OnTime",  StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+    // onoff.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
 
+    // // Sender on Node 0
     // ApplicationContainer apps = onoff.Install(c.Get(0));
-    // apps.Start(Seconds(30.0));
-    // apps.Stop(Seconds(200.0));
+    // apps.Start(Seconds(100.0));
+    // apps.Stop(Seconds(500.0));
+
+    // // =============================
+    // //   PACKET SINK (only once!)
+    // // =============================
+    // PacketSinkHelper sink("ns3::UdpSocketFactory",
+    //                     InetSocketAddress(Ipv4Address::GetAny(), port));
+
+    // ApplicationContainer sinkApps = sink.Install(c.Get(4));
+    // sinkApps.Start(Seconds(100.0));
+    // sinkApps.Stop(Seconds(500.0));
+
+    // // Get PacketSink pointer correctly
+    // Ptr<PacketSink> sinkApp = DynamicCast<PacketSink>(sinkApps.Get(0));
+
+    // // Schedule print (lambda with capture OK)
+    // Simulator::Schedule(Seconds(500.0), [sinkApp] () {
+    //     std::cout << "Total Received: " << sinkApp->GetTotalRx() << std::endl;
+    // });
 
     // for record
     // Simulator::Schedule(Seconds(1.0), &Ipv4AntNetRouting::PrintPheromonesCsv, this, stream);
-    Ipv4AntNetRoutingHelper::ScheduleCsvLogging(0.3, "src/antnet/log/pheromones/");
+    Ipv4AntNetRoutingHelper::ScheduleCsvLogging(0.2, "src/antnet/log/pheromones/");
 
 
     // Run Simulation
@@ -200,4 +226,3 @@ main(int argc, char* argv[])
     Ipv4AntNetRoutingHelper::PrintRoutingTables();
 
 }
-

@@ -387,6 +387,7 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
         } else if (antType == AntHeader::Type::BACKWARD_ANT) {
             // Process backward ant
             NS_LOG_LOGIC("Processing backward ant to " << header.GetDestination());
+            NS_LOG_INFO("Processing backward ant to " << header.GetDestination());
 
             // Update local traffic statistics and routing table pheromones
             std::vector<AntHeader::AntHeaderStackEntry> backwardStack = antHeader.GetBackwardStack();
@@ -412,6 +413,10 @@ Ipv4AntNetRouting::RouteInput(Ptr<const Packet> p,
             Ipv4AntNetRoutingTableEntry* routeEntry = FindRoutingTableEntry(antDestinationAddr);
             if (routeEntry) {
                 // Call the routing table entry's pheromone update method
+                // logにsourceとdestのipを記録
+                // nodeのipを記録
+                // NS_LOG_INFO("node:" << );
+                NS_LOG_INFO("nextForwardHopAddr:" << nextForwardHopAddr << " antDestinationAddr:"<<antDestinationAddr);
                 routeEntry->UpdatePheromone(nextForwardHopAddr, delay.GetMilliSeconds(), *trafficEntry);
                 NS_LOG_LOGIC("Updated routing table pheromones for destination " << antDestinationAddr);
             } else {
