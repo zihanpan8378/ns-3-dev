@@ -66,11 +66,11 @@ main(int argc, char* argv[])
 
     // Enable logging
     LogComponentEnable("PaperAntNetExample", LOG_LEVEL_INFO);
-    // LogComponentEnable("Ipv4AntNetRoutingHelper", LOG_LEVEL_INFO);
-    LogComponentEnable("Ipv4AntNetRouting", LOG_LEVEL_INFO);
+    LogComponentEnable("Ipv4AntNetRoutingHelper", LOG_LEVEL_LOGIC);
+    // LogComponentEnable("Ipv4AntNetRouting", LOG_LEVEL_INFO);
     // LogComponentEnable("AntHeader", LOG_LEVEL_INFO);
     // LogComponentEnable("Ipv4AntNetLocalTrafficStatisticsEntry", LOG_LEVEL_INFO);
-    LogComponentEnable("Ipv4AntNetRoutingTableEntry", LOG_LEVEL_INFO);
+    // LogComponentEnable("Ipv4AntNetRoutingTableEntry", LOG_LEVEL_INFO);
     
     // Set up some default values for the simulation.  Use the
     // Config::SetDefault("ns3::OnOffApplication::PacketSize", UintegerValue(512));
@@ -82,7 +82,9 @@ main(int argc, char* argv[])
 
     CommandLine cmd(__FILE__);
     bool enableFlowMonitor = false;
+    std::string exName = "ex2";
     cmd.AddValue("EnableMonitor", "Enable Flow Monitor", enableFlowMonitor);
+    cmd.AddValue("exName", "Experiment name", exName);
     cmd.Parse(argc, argv);
 
     // Create nodes
@@ -152,12 +154,13 @@ main(int argc, char* argv[])
     Ipv4InterfaceContainer i6i7 = ipv4.Assign(d6d7);
 
     // Create routing tables
-    Ipv4AntNetRoutingHelper::BuildAntNetTopology();
+    std::string prefix = "src/antnet/log/" + exName + "/";
+    Ipv4AntNetRoutingHelper::BuildAntNetTopology(prefix);
 
 
     std::map<int, std::vector<ns3::Ipv4Address>> sourceDestMap;
 
-    // ノードID 2 から送る宛先
+    // sourceDestMap defines from which sources to which IP addresses the ant packets are sent
     sourceDestMap[0] = { ns3::Ipv4Address("10.1.7.2") };
     sourceDestMap[1] = { ns3::Ipv4Address("10.1.7.2") };
     sourceDestMap[2] = { ns3::Ipv4Address("10.1.7.2") };
@@ -213,7 +216,7 @@ main(int argc, char* argv[])
 
     // for record
     // Simulator::Schedule(Seconds(1.0), &Ipv4AntNetRouting::PrintPheromonesCsv, this, stream);
-    Ipv4AntNetRoutingHelper::ScheduleCsvLogging(0.2, "src/antnet/log/pheromones/");
+    Ipv4AntNetRoutingHelper::ScheduleCsvLogging(0.2, "src/antnet/log/" + exName + "/pheromones/");
 
 
     // Run Simulation

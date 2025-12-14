@@ -29,7 +29,7 @@ class Ipv4AntNetRoutingHelper : public Ipv4RoutingHelper
 
         Ptr<Ipv4RoutingProtocol> Create(Ptr<Node> node) const override;
 
-        static void BuildAntNetTopology();
+        static void BuildAntNetTopology(std::string prefix="src/antnet/log/ex_default/");
 
         static void InitializeNodeRoutingTables();
 
@@ -40,6 +40,11 @@ class Ipv4AntNetRoutingHelper : public Ipv4RoutingHelper
 
         static void ScheduleCsvLogging(double interval, std::string prefix);
         static void DoCsvLogging(double interval, std::string prefix);
+
+        // for visualizing
+        static void SaveIpToNodeJson (const std::map<std::string, uint32_t> &ipToNode, const std::string &filePath);
+        static void SaveNodeToIPJson (const std::string &filePath);
+        static void SaveEdges(const std::string &filePath);
         
     private:
         static std::map<ns3::Ptr<ns3::Node>, std::list<std::pair<Ipv4Address, Ipv4Address>>> m_neighbourAdjList;
