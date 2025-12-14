@@ -195,7 +195,7 @@ def visualize(ex_dir, destIP, outputDir, pos):
     # =======================
     csv_dir = ex_dir + "/pheromones/"
     print(csv_dir)
-    files = sorted(glob.glob(os.path.join(csv_dir, "_node_*.csv")))
+    files = sorted(glob.glob(os.path.join(csv_dir, "node_*.csv")))
     if len(files) == 0:
         raise RuntimeError("No node*.csv found in directory.")
 
@@ -204,7 +204,7 @@ def visualize(ex_dir, destIP, outputDir, pos):
     for path in files:
         # node番号を抽出
         base = os.path.basename(path)
-        node_id = int(base.replace("_node_", "").replace(".csv", ""))
+        node_id = int(base.replace("node_", "").replace(".csv", ""))
 
         df_node = pd.read_csv(path)
         df_node["node"] = node_id   # node列を追加

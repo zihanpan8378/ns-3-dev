@@ -231,6 +231,46 @@ Ipv4AntNetRoutingHelper::InitializeNodeRoutingTables()
 }
 
 void 
+Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourceAndDestination(uint32_t SourceID, Ipv4Address DestinationAddress)
+{
+    int num_nodes = NodeList::GetNNodes();
+    Ipv4AntNetRoutingTableEntry::Nk = num_nodes;
+    for (auto i = NodeList::Begin(); i != NodeList::End(); ++i) {
+        Ptr<Node> node = *i;
+
+        NS_LOG_LOGIC("Initializing routing table for node " << node->GetId());
+
+        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+        if (!ipv4) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4 object, skipping...");
+            continue;
+        }
+
+        Ptr<Ipv4RoutingProtocol> routing = ipv4->GetRoutingProtocol();
+        if (!routing) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4RoutingProtocol object, skipping...");
+            continue;
+        }
+
+        Ptr<Ipv4AntNetRouting> antRouting = routing->GetObject<Ipv4AntNetRouting>();
+        if (!antRouting) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4AntNetRouting object, skipping...");
+            continue;
+        }
+
+        if (node->GetId() == SourceID) {
+            NS_LOG_LOGIC("    Initializing routing table for node ID " << node->GetId() << " to send ants to specific destination ID " << DestinationAddress);
+            NS_LOG_LOGIC("    This node is sending ants.");
+            antRouting->InitializeRoutingTable(m_nodeList, m_neighbourAdjList[node], 1, DestinationAddress);
+        } else {
+            NS_LOG_LOGIC("    Initializing normal routing table for node ID " << node->GetId());
+            NS_LOG_LOGIC("    This node is not sending ants.");
+            antRouting->InitializeRoutingTable(m_nodeList, m_neighbourAdjList[node], 0);
+        }
+    }
+}
+
+void 
 Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourcesAndDestinations(
     const std::map<int, std::vector<Ipv4Address>>& sourceDestMap)
 {
@@ -345,6 +385,13 @@ Ipv4AntNetRoutingHelper::VerifyRoutingTables(std::list<Ipv4AntNetRouting::Routin
 void
 Ipv4AntNetRoutingHelper::ScheduleCsvLogging(double interval, std::string prefix)
 {
+    NS_LOG_INFO("Scheduling CSV logging every " << interval << " seconds, prefix: " << prefix);
+
+    // Remove all files matching the prefix pattern
+    std::string rmCmd = "rm -f " + prefix + "*.csv";
+    int result = system(rmCmd.c_str());
+    (void)result; // Suppress unused variable warning
+
     Simulator::Schedule(
         Seconds(interval),
         &Ipv4AntNetRoutingHelper::DoCsvLogging,
@@ -374,6 +421,17 @@ Ipv4AntNetRoutingHelper::DoCsvLogging(double interval, std::string prefix)
         // CSVファイル名
         std::ostringstream fname;
         fname << prefix << "node_" << node->GetId() << ".csv";
+
+        // Extract directory path and create it if it doesn't exist
+        std::string filePath = fname.str();
+        size_t lastSlash = filePath.find_last_of("/");
+        if (lastSlash != std::string::npos)
+        {
+            std::string dirPath = filePath.substr(0, lastSlash);
+            std::string mkdirCmd = "mkdir -p " + dirPath;
+            int result = system(mkdirCmd.c_str());
+            (void)result; // Suppress unused variable warning
+        }
 
         bool needHeader = !std::ifstream(fname.str()).good();
 
