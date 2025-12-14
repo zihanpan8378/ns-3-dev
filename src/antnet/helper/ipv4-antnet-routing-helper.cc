@@ -233,7 +233,7 @@ Ipv4AntNetRoutingHelper::InitializeNodeRoutingTables()
 }
 
 void 
-Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourceAndDestination(int SourceID, Ipv4Address DestinationAddress)
+Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourceAndDestination(uint32_t SourceID, Ipv4Address DestinationAddress)
 {
     int num_nodes = NodeList::GetNNodes();
     Ipv4AntNetRoutingTableEntry::Nk = num_nodes;
@@ -358,6 +358,13 @@ Ipv4AntNetRoutingHelper::PrintRoutingTables()
 void
 Ipv4AntNetRoutingHelper::ScheduleCsvLogging(double interval, std::string prefix)
 {
+    NS_LOG_INFO("Scheduling CSV logging every " << interval << " seconds, prefix: " << prefix);
+
+    // Remove all files matching the prefix pattern
+    std::string rmCmd = "rm -f " + prefix + "*.csv";
+    int result = system(rmCmd.c_str());
+    (void)result; // Suppress unused variable warning
+
     Simulator::Schedule(
         Seconds(interval),
         &Ipv4AntNetRoutingHelper::DoCsvLogging,
@@ -387,6 +394,17 @@ Ipv4AntNetRoutingHelper::DoCsvLogging(double interval, std::string prefix)
         // CSVファイル名
         std::ostringstream fname;
         fname << prefix << "node_" << node->GetId() << ".csv";
+
+        // Extract directory path and create it if it doesn't exist
+        std::string filePath = fname.str();
+        size_t lastSlash = filePath.find_last_of("/");
+        if (lastSlash != std::string::npos)
+        {
+            std::string dirPath = filePath.substr(0, lastSlash);
+            std::string mkdirCmd = "mkdir -p " + dirPath;
+            int result = system(mkdirCmd.c_str());
+            (void)result; // Suppress unused variable warning
+        }
 
         bool needHeader = !std::ifstream(fname.str()).good();
 
