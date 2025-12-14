@@ -31,18 +31,31 @@ class Ipv4AntNetRoutingHelper : public Ipv4RoutingHelper
 
         Ptr<Ipv4RoutingProtocol> Create(Ptr<Node> node) const override;
 
-        static void BuildAntNetTopology();
+        static void BuildAntNetTopology(std::string prefix = "src/antnet/log/ex_default/");
 
         static void InitializeNodeRoutingTables();
 
+        static void InitializeNodeRoutingTablesForSpecificSourceAndDestination(int SourceID, Ipv4Address DestinationAddress);
+        static void InitializeNodeRoutingTablesForSpecificSourcesAndDestinations(const std::map<int, std::vector<Ipv4Address>>& sourceDestMap);
+
         static void PrintRoutingTables();
 
+        static void ScheduleCsvLogging(double interval, std::string prefix);
+        static void DoCsvLogging(double interval, std::string prefix);
+
+        // for testing
         static bool VerifyRoutingTables(std::list<Ipv4AntNetRouting::RoutingTable> testRoutingTable, std::list<Ipv4AntNetRouting::LocalTrafficStatisticsTable> testLocalTrafficStatsTable);
+
+        // for visualizing
+        static void SaveIpToNodeJson (const std::map<std::string, uint32_t> &ipToNode, const std::string &filePath);
+        static void SaveNodeToIPJson (const std::string &filePath);
+        static void SaveEdges(const std::string &filePath);
         
     private:
         static std::map<ns3::Ptr<ns3::Node>, std::list<std::pair<Ipv4Address, Ipv4Address>>> m_neighbourAdjList;
         static std::list<std::pair<Ipv4Address, Ipv4Address>> m_nodeList;
 };
+
 
 } // namespace ns3
 

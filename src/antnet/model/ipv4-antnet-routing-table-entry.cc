@@ -9,6 +9,8 @@ namespace ns3
 {
 NS_LOG_COMPONENT_DEFINE("Ipv4AntNetRoutingTableEntry");
 
+int Ipv4AntNetRoutingTableEntry::Nk = 0;
+
 Ipv4AntNetRoutingTableEntry::Ipv4AntNetRoutingTableEntry()
 {
     NS_LOG_FUNCTION(this);
@@ -211,6 +213,11 @@ Ipv4AntNetRoutingTableEntry::UpdatePheromone(Ipv4Address nextHop, double delayMi
     double iSup = trafficStat.GetUpperBoundDelayFromWindow();
 
     double reward = C1 * (bestDelay / (delayMillisecond + 1e-6)) + C2 * ((iSup - iInf) / ((iSup - iInf) + (delayMillisecond + 1e-6 - iInf))); // Avoid division by zero
+
+    double a = 7.0;
+    double sr = 1.0 / (1.0 + std::exp(a / (reward*Nk))); // Sigmoid function to bound reward between 0 and 1
+    double s1 = 1.0 / (1.0 + std::exp(a / Nk));
+    reward = sr/s1; // Normalize to [0, 1]
 
     if (reward > 0.95) {
         reward = 0.95;

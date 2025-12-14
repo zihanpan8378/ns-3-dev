@@ -23,6 +23,7 @@ class Ipv4AntNetLocalTrafficStatisticsEntry
         double m_delayVariance;                                     // Variance of delay to destination
         std::list<double> m_delayWindow;                            // Sliding window of delays
         int m_receivedSamplesCount;                                 // Number of received delay samples (for debugging/statistics)
+        bool m_initialized = false;                                 // Whether statistics have been initialized
 
         static constexpr double ETA = 0.005;                        // mean update rate
         static constexpr double C = 0.3;                            // constant for window size calculation

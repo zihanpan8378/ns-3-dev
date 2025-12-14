@@ -32,3 +32,14 @@ build_lib_example(
     ${libmobility}
     ${libcsma}
 )
+
+build_lib_example(
+  NAME antnet-paper-example-for-track-pheromone
+  SOURCE_FILES antnet-paper-example_for_track_pheromone.cc
+  LIBRARIES_TO_LINK
+    ${libantnet}
+    ${libinternet}
+    ${libapplications}
+    ${libpoint-to-point}
+    ${libmobility}
+)

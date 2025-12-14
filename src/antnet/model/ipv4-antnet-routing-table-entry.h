@@ -140,6 +140,9 @@ class Ipv4AntNetRoutingTableEntry
                                                                 Ipv4Mask networkMask,
                                                                 std::list<PheromoneKey> nextHops);
 
+        // Number of nodes in the network(nodes...? or IP...?)
+        static int Nk; 
+
     private:
         Ipv4Address m_dest;
         Ipv4Mask m_destNetworkMask;

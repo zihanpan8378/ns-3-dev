@@ -42,7 +42,7 @@ Ptr<Ipv4RoutingProtocol> Ipv4AntNetRoutingHelper::Create(Ptr<Node> node) const
 }
 
 void
-Ipv4AntNetRoutingHelper::BuildAntNetTopology() 
+Ipv4AntNetRoutingHelper::BuildAntNetTopology(std::string prefix) 
 {
     // Clear previous topology data
     m_neighbourAdjList.clear();
@@ -73,7 +73,7 @@ Ipv4AntNetRoutingHelper::BuildAntNetTopology()
 
         // Discover LSAs for this router
         uint32_t numLSAs = rtr->DiscoverLSAs();
-        NS_LOG_LOGIC("Found " << numLSAs << " LSAs for node " << node->GetId());
+        NS_LOG_INFO("Found " << numLSAs << " LSAs for node " << node->GetId());
 
         // Iterate over LSAs to extract link records
         for (uint32_t j = 0; j < numLSAs; ++j) {
@@ -81,7 +81,7 @@ Ipv4AntNetRoutingHelper::BuildAntNetTopology()
             GlobalRoutingLSA* lsa = new GlobalRoutingLSA();
             rtr->GetLSA(j, *lsa);
 
-            lsa->Print(std::cout);
+            // lsa->Print(std::cout);
 
             // For Router LSAs that are not originated by this router and other types of LSAs, skip them
             if (lsa->GetLSType () != GlobalRoutingLSA::RouterLSA || lsa->GetAdvertisingRouter () != rtr->GetRouterId ()) {
@@ -165,13 +165,32 @@ Ipv4AntNetRoutingHelper::BuildAntNetTopology()
         m_nodeList.push_back(addr);
     }
 
+    // for visualizing
+    std::map<std::string, uint32_t> ipToNode; 
+
     NS_LOG_LOGIC("Topology adjacency list:");
     for (const auto &node : m_neighbourAdjList) {
         NS_LOG_LOGIC("    Node " << node.first->GetId() << " neighbours: ");
         for (const auto &nbr : node.second) {
             NS_LOG_LOGIC("        " << nbr.first << "/" << Ipv4Mask(nbr.second.Get()).GetPrefixLength());
         }
+        
+        // for visualizing
+        uint32_t nodeId = node.first->GetId();
+        for (const auto &nbr : node.second) {
+            std::ostringstream oss;
+            oss << nbr.first;  // Ipv4Address → string
+            ipToNode[oss.str()] = nodeId;
+        }
     }
+
+    // for visualizing
+    std::string fname_ip_to_node = prefix + "ip_to_node.json";
+    std::string fname_node_to_ip = prefix + "node_to_ip.json";
+    std::string fname_txt = prefix + "edges.txt";
+    SaveIpToNodeJson(ipToNode, fname_ip_to_node);
+    SaveNodeToIPJson(fname_node_to_ip);
+    SaveEdges(fname_txt);
 
     NS_LOG_LOGIC("All destination addresses: ");
     for (const auto &addr : m_nodeList) {
@@ -182,6 +201,8 @@ Ipv4AntNetRoutingHelper::BuildAntNetTopology()
 void 
 Ipv4AntNetRoutingHelper::InitializeNodeRoutingTables() 
 {
+    int num_nodes = NodeList::GetNNodes();
+    Ipv4AntNetRoutingTableEntry::Nk = num_nodes;
     for (auto i = NodeList::Begin(); i != NodeList::End(); ++i) {
         Ptr<Node> node = *i;
 
@@ -205,7 +226,60 @@ Ipv4AntNetRoutingHelper::InitializeNodeRoutingTables()
             continue;
         }
 
-        antRouting->InitializeRoutingTable(m_nodeList, m_neighbourAdjList[node]);
+        antRouting->InitializeRoutingTable(m_nodeList, m_neighbourAdjList[node], 2);
+    }
+}
+
+void 
+Ipv4AntNetRoutingHelper::InitializeNodeRoutingTablesForSpecificSourcesAndDestinations(
+    const std::map<int, std::vector<Ipv4Address>>& sourceDestMap)
+{
+    int num_nodes = NodeList::GetNNodes();
+    Ipv4AntNetRoutingTableEntry::Nk = num_nodes;
+
+    // ソースノードセットを作る（検索高速化用）
+    std::set<int> sourceSet;
+    for (const auto& pair : sourceDestMap) {
+        sourceSet.insert(pair.first);
+    }
+
+    for (auto i = NodeList::Begin(); i != NodeList::End(); ++i) {
+        Ptr<Node> node = *i;
+
+        NS_LOG_LOGIC("Initializing routing table for node " << node->GetId());
+
+        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+        if (!ipv4) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4 object, skipping...");
+            continue;
+        }
+
+        Ptr<Ipv4RoutingProtocol> routing = ipv4->GetRoutingProtocol();
+        if (!routing) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4RoutingProtocol object, skipping...");
+            continue;
+        }
+
+        Ptr<Ipv4AntNetRouting> antRouting = routing->GetObject<Ipv4AntNetRouting>();
+        if (!antRouting) {
+            NS_LOG_WARN("Node " << node->GetId() << " has no Ipv4AntNetRouting object, skipping...");
+            continue;
+        }
+
+        if (sourceSet.find(node->GetId()) != sourceSet.end()) {
+            NS_LOG_LOGIC("    Initializing routing table for node ID " << node->GetId() << " to send ants.");
+
+            const std::vector<Ipv4Address>& destList = sourceDestMap.at(node->GetId());
+            for (auto dest : destList) {
+                NS_LOG_LOGIC("        Destination: " << dest);
+                // ここでは1つずつ初期化する。必要に応じて antRouting 内で複数宛先をまとめて初期化可能
+                antRouting->InitializeRoutingTable(m_nodeList, m_neighbourAdjList[node], 1, dest);
+            }
+        } else {
+            NS_LOG_LOGIC("    Initializing normal routing table for node ID " << node->GetId());
+            NS_LOG_LOGIC("    This node is not sending ants.");
+            antRouting->InitializeRoutingTable(m_nodeList, m_neighbourAdjList[node], 0);
+        }
     }
 }
 
@@ -266,6 +340,194 @@ Ipv4AntNetRoutingHelper::VerifyRoutingTables(std::list<Ipv4AntNetRouting::Routin
         antRouting->VerifyRoutingTable(testRoutingTable.front(), testLocalTrafficStatsTable.front());
     }
     return true;
+}
+
+void
+Ipv4AntNetRoutingHelper::ScheduleCsvLogging(double interval, std::string prefix)
+{
+    Simulator::Schedule(
+        Seconds(interval),
+        &Ipv4AntNetRoutingHelper::DoCsvLogging,
+        interval,
+        prefix);
+}
+
+void
+Ipv4AntNetRoutingHelper::DoCsvLogging(double interval, std::string prefix)
+{
+    for (auto it = NodeList::Begin(); it != NodeList::End(); ++it)
+    {
+        Ptr<Node> node = *it;
+
+        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+        if (!ipv4)
+            continue;
+
+        Ptr<Ipv4RoutingProtocol> rp = ipv4->GetRoutingProtocol();
+        if (!rp)
+            continue;
+
+        Ptr<Ipv4AntNetRouting> ant = rp->GetObject<Ipv4AntNetRouting>();
+        if (!ant)
+            continue;
+
+        // CSVファイル名
+        std::ostringstream fname;
+        fname << prefix << "node_" << node->GetId() << ".csv";
+
+        bool needHeader = !std::ifstream(fname.str()).good();
+
+        Ptr<OutputStreamWrapper> stream =
+            ns3::Create<OutputStreamWrapper>(fname.str(), std::ios::app);
+
+        if (needHeader)
+        {
+            ant->PrintPheromonesCsvHeader(stream);
+        }
+
+        ant->PrintPheromonesCsv(stream);
+    }
+
+    // 再スケジュール
+    Simulator::Schedule(
+        Seconds(interval),
+        &Ipv4AntNetRoutingHelper::DoCsvLogging,
+        interval,
+        prefix);
+}
+
+void
+Ipv4AntNetRoutingHelper::SaveIpToNodeJson (
+    const std::map<std::string, uint32_t> &ipToNode,
+    const std::string &filePath)
+{
+    std::ofstream ofs (filePath, std::ofstream::out | std::ofstream::trunc);
+    if (!ofs.is_open ())
+    {
+        NS_LOG_ERROR ("Failed to open file: " << filePath);
+        return;
+    }
+
+    ofs << "{\n";
+
+    for (auto it = ipToNode.begin (); it != ipToNode.end (); ++it)
+    {
+        ofs << "  \"" << it->first << "\": " << it->second;
+        if (std::next (it) != ipToNode.end ())
+        {
+            ofs << ",";
+        }
+        ofs << "\n";
+    }
+
+    ofs << "}\n";
+    ofs.close ();
+
+    NS_LOG_INFO("ipToNode JSON saved to " << filePath);
+}
+
+void
+Ipv4AntNetRoutingHelper::SaveNodeToIPJson (const std::string &filePath)
+{
+    std::map<uint32_t, std::vector<std::string>> nodeToIps;
+
+    for (auto it = NodeList::Begin(); it != NodeList::End(); ++it)
+    {
+        Ptr<Node> node = *it;
+        uint32_t nodeId = node->GetId();
+
+        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+        if (!ipv4) continue;
+
+        std::vector<std::string> ips;
+
+        for (uint32_t i = 0; i < ipv4->GetNInterfaces(); ++i)
+        {
+            // interface 0 は loopback
+            if (i == 0) continue;
+
+            for (uint32_t a = 0; a < ipv4->GetNAddresses(i); ++a)
+            {
+                Ipv4InterfaceAddress addr = ipv4->GetAddress(i, a);
+                Ipv4Address ip = addr.GetLocal();
+
+                // 0.0.0.0 を除外
+                if (ip == Ipv4Address("0.0.0.0"))
+                    continue;
+
+                std::ostringstream oss;
+                oss << ip;   // ← ToString() の代わり
+                ips.push_back(oss.str());
+            }
+        }
+
+        nodeToIps[nodeId] = ips;
+    }
+
+    std::ofstream ofs(filePath);
+    ofs << "{\n";
+
+    bool firstNode = true;
+    for (auto &p : nodeToIps)
+    {
+        if (!firstNode) ofs << ",\n";
+        firstNode = false;
+
+        ofs << "  \"" << p.first << "\": [";
+
+        for (size_t i = 0; i < p.second.size(); ++i)
+        {
+            ofs << "\"" << p.second[i] << "\"";
+            if (i + 1 < p.second.size()) ofs << ", ";
+        }
+        ofs << "]";
+    }
+
+    ofs << "\n}\n";
+    ofs.close();
+}
+
+void
+Ipv4AntNetRoutingHelper::SaveEdges (const std::string &filePath)
+{
+    std::set<std::pair<uint32_t, uint32_t>> edgeSet;
+
+    for (auto it = NodeList::Begin(); it != NodeList::End(); ++it)
+    {
+        Ptr<Node> node = *it;
+        uint32_t u = node->GetId();
+
+        for (uint32_t d = 0; d < node->GetNDevices(); ++d)
+        {
+            Ptr<NetDevice> dev = node->GetDevice(d);
+            Ptr<Channel> ch = dev->GetChannel();
+            if (!ch) continue;
+
+            for (uint32_t c = 0; c < ch->GetNDevices(); ++c)
+            {
+                Ptr<NetDevice> peerDev = ch->GetDevice(c);
+                Ptr<Node> peerNode = peerDev->GetNode();
+                uint32_t v = peerNode->GetId();
+
+                if (u != v)
+                {
+                    edgeSet.insert({u, v}); // 有向 edge
+                }
+            }
+        }
+    }
+
+    std::ofstream ofs(filePath);
+    ofs << "edges = [\n";
+
+    for (auto &e : edgeSet)
+    {
+        ofs << "        (" << e.first << "," << e.second << "),\n";
+    }
+
+    ofs << "]\n";
+    ofs.close();
+    NS_LOG_INFO("edges saved to " << filePath);
 }
 
 } // namespace ns3
