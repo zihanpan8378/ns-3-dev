@@ -81,7 +81,7 @@ Ipv4AntNetRoutingHelper::BuildAntNetTopology(std::string prefix)
             GlobalRoutingLSA* lsa = new GlobalRoutingLSA();
             rtr->GetLSA(j, *lsa);
 
-            // lsa->Print(std::cout);
+            lsa->Print(std::cout);
 
             // For Router LSAs that are not originated by this router and other types of LSAs, skip them
             if (lsa->GetLSType () != GlobalRoutingLSA::RouterLSA || lsa->GetAdvertisingRouter () != rtr->GetRouterId ()) {
