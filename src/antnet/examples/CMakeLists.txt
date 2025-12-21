@@ -57,3 +57,18 @@ build_lib_example(
     ${libpoint-to-point}
     ${libmobility}
 )
+
+build_lib_example(
+  NAME antnet-topology-nxy-example
+  SOURCE_FILES antnet-topology-nxy-example.cc
+  LIBRARIES_TO_LINK
+    ${libantnet}
+    ${libinternet}
+    ${libapplications}
+    ${libpoint-to-point}
+    ${libcsma}
+    ${libmobility}
+    ${libwifi}
+    ${libmesh}
+    ${libbridge}
+)
