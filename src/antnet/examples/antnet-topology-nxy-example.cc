@@ -28,9 +28,6 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("AntNetTopologyNxyExample");
 
-// ─────────────────────────────────────────────────────────────
-// (NEW) STA2 ping-pong movement helpers
-// ─────────────────────────────────────────────────────────────
 static double
 KmphToMps(double kmph)
 {
@@ -63,9 +60,7 @@ Sta2ToggleVelocityAndReschedule(Ptr<ConstantVelocityMobilityModel> mob,
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Per-second stats + JSON dump (double arrays)
-// ─────────────────────────────────────────────────────────────
+
 struct PerSecondStats
 {
   uint32_t numSeconds{0};
@@ -151,9 +146,7 @@ struct PerSecondStats
   }
 };
 
-// ─────────────────────────────────────────────────────────────
-// UDP one-way timestamp client using TimestampTag
-// ─────────────────────────────────────────────────────────────
+
 class UdpTsClientApp : public Application
 {
 public:
@@ -232,9 +225,6 @@ private:
   PerSecondStats* m_stats{nullptr};
 };
 
-// ─────────────────────────────────────────────────────────────
-// UDP timestamp server using TimestampTag
-// ─────────────────────────────────────────────────────────────
 class UdpTsServerApp : public Application
 {
 public:
@@ -298,9 +288,6 @@ private:
   PerSecondStats* m_stats{nullptr};
 };
 
-// ─────────────────────────────────────────────────────────────
-// Soft failure: bring IPv4 interfaces down/up
-// ─────────────────────────────────────────────────────────────
 static void
 SetNodeIpv4InterfacesUpDown(Ptr<Node> node, bool up, int32_t ifIndex)
 {
@@ -372,9 +359,6 @@ EnableForwardingOnNodes(const std::vector<Ptr<Node>>& nodes)
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// ESS helper (maxRangeMeters to keep km reachable)
-// ─────────────────────────────────────────────────────────────
 struct EssWifiDevices
 {
   std::vector<NetDeviceContainer> apDevs;
@@ -521,26 +505,22 @@ main(int argc, char* argv[])
   uint32_t lowerAccessChannel = 11;
   uint32_t lowerMeshChannel   = 3;
 
-  // failure knobs
   bool enableFail = false;
   std::string failTarget = "N10";
   double failTimeSec = 20.0;
   double recoverTimeSec = 40.0;
   int32_t failIfIndex = -1;
 
-  // metrics knobs
   std::string latencyJsonPath = "sta1_sta2_latency.json";
   std::string lossJsonPath = "sta1_sta2_loss.json";
   double trafficIntervalMs = 200.0;
   uint32_t trafficPacketSize = 200;
 
-  // upper-line geometry + range knobs
-  double upperHopMeters = 5000.0;        // 5km spacing
-  double upperMaxRangeMeters = 6000.0;   // > upperHopMeters
+  double upperHopMeters = 5000.0;       
+  double upperMaxRangeMeters = 6000.0; 
 
-  // (NEW) STA2 mobility knobs
   bool enableSta2PingPong = true;
-  double sta2SpeedKmph = 80.0;           // 80 km/h
+  double sta2SpeedKmph = 80.0;      
   double sta2Z = 0.0;
 
   CommandLine cmd(__FILE__);
@@ -571,18 +551,15 @@ main(int argc, char* argv[])
   cmd.AddValue("upperHopMeters", "Upper line spacing between N10->U0 and Ui->U(i+1) (meters)", upperHopMeters);
   cmd.AddValue("upperMaxRangeMeters", "Upper wifi RangePropagationLossModel MaxRange (meters)", upperMaxRangeMeters);
 
-  // (NEW)
   cmd.AddValue("enableSta2PingPong", "Enable STA2 ping-pong movement (true/false)", enableSta2PingPong);
   cmd.AddValue("sta2SpeedKmph", "STA2 speed in km/h (ping-pong)", sta2SpeedKmph);
 
   cmd.Parse(argc, argv);
 
-  // AntNet defaults
   Config::SetDefault("ns3::Ipv4AntNetRouting::ForwardAntInterval", TimeValue(Seconds(5)));
   Config::SetDefault("ns3::Ipv4AntNetRouting::UseBeaconWindow", BooleanValue(true));
   Config::SetDefault("ns3::Ipv4AntNetRouting::UseFailureMessagePropagation", BooleanValue(false));
 
-  // Create nodes
   Ptr<Node> N0 = CreateObject<Node>();
   Ptr<Node> N1 = CreateObject<Node>();
   Ptr<Node> N2 = CreateObject<Node>();
@@ -630,12 +607,10 @@ main(int argc, char* argv[])
   for (auto& b : lowerGroupB) all.Add(b);
   all.Add(STA1); all.Add(STA2);
 
-  // Internet + AntNet routing
   InternetStackHelper internet;
   internet.SetRoutingHelper(Ipv4AntNetRoutingHelper());
   internet.Install(all);
 
-  // Wired links
   PointToPointHelper p2p;
   p2p.SetDeviceAttribute("DataRate", StringValue(p2pRate));
   p2p.SetDeviceAttribute("Mtu", UintegerValue(1500));
@@ -661,7 +636,6 @@ main(int argc, char* argv[])
   lanNodes.Add(H0); lanNodes.Add(H1); lanNodes.Add(H2);
   NetDeviceContainer dLan = csma.Install(lanNodes);
 
-  // Addressing
   Ipv4AddressHelper ipv4;
   const std::string mask = "255.255.255.0";
   uint32_t p2pNet = 1;
@@ -682,7 +656,6 @@ main(int argc, char* argv[])
   ipv4.SetBase("10.8.0.0", mask.c_str());
   ipv4.Assign(dLan);
 
-  // WiFi config
   WifiHelper wifi;
   wifi.SetStandard(WIFI_STANDARD_80211g);
   wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
@@ -690,7 +663,6 @@ main(int argc, char* argv[])
                                "ControlMode", StringValue("ErpOfdmRate6Mbps"));
   double txPowerDbm = 16.0;
 
-  // Upper: ESS + Mesh with max range for 5km
   EssWifiDevices upperEss =
     InstallEssMultiApOneSta(upperAps, STA2, "STA2-ESS", txPowerDbm,
                             upperAccessChannel, wifi,
@@ -730,7 +702,7 @@ main(int argc, char* argv[])
     ipv4.Assign(upperMeshDevs);
   }
 
-  // Lower: Mesh + ESS (short range; keep simple)
+
   {
     double lowerMaxRangeMeters = 1000.0;
 
@@ -775,15 +747,12 @@ main(int argc, char* argv[])
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Mobility / placement
-  // ─────────────────────────────────────────────────────────────
+ 
   Ptr<ListPositionAllocator> pos = CreateObject<ListPositionAllocator>();
   auto AddPos = [&](Ptr<Node> node, double x_, double y_, double z = 0.0) {
     pos->Add(Vector(x_, y_, z));
   };
 
-  // Base wired placement
   AddPos(N0, 0, 200);
   AddPos(N4, 50, 220);
   AddPos(N5, 80, 220);
@@ -798,7 +767,6 @@ main(int argc, char* argv[])
   AddPos(N9, 120, 120);
   AddPos(N3, 180, 60);
 
-  // Upper right line: N10 + U0..U(n-1) spacing = upperHopMeters
   double n10x = 180.0;
   double n10y = 200.0;
   AddPos(N10, n10x, n10y);
@@ -808,10 +776,7 @@ main(int argc, char* argv[])
     AddPos(upperAps[i], n10x + (i + 1) * upperHopMeters, n10y);
   }
 
-  // (CHANGED) STA2 initial position will be set by ConstantVelocityMobilityModel below,
-  // so we DO NOT AddPos(STA2, ...) here.
 
-  // Lower groups keep dense layout
   double ax0 = 240.0, ay0 = 60.0;
   for (uint32_t i = 0; i < x; ++i) AddPos(lowerGroupA[i], ax0 + i * hopDistance, ay0);
 
@@ -821,9 +786,7 @@ main(int argc, char* argv[])
   double sta1x = (y > 0) ? (bx0 + (y - 1) * hopDistance) : bx0;
   AddPos(STA1, sta1x + sta1Distance, by0);
 
-  // (NEW) Install mobility:
-  // - All nodes except STA2: ConstantPosition
-  // - STA2: ConstantVelocity (ping-pong)
+
   MobilityHelper mobilityStatic;
   mobilityStatic.SetMobilityModel("ns3::ConstantPositionMobilityModel");
   mobilityStatic.SetPositionAllocator(pos);
@@ -844,7 +807,6 @@ main(int argc, char* argv[])
   mobilitySta2.SetMobilityModel("ns3::ConstantVelocityMobilityModel");
   mobilitySta2.Install(STA2);
 
-  // Set STA2 initial pos and velocity for ping-pong between U0 and U(n-1)
   Ptr<ConstantVelocityMobilityModel> sta2Mob = STA2->GetObject<ConstantVelocityMobilityModel>();
   if (!sta2Mob)
   {
@@ -852,14 +814,12 @@ main(int argc, char* argv[])
   }
   else
   {
-    // Define the travel corridor: from leftmost AP (U0) to rightmost AP (U(n-1)) on x-axis,
-    // keep STA2 at y = n10y + sta2Distance (above the AP line).
+
     double xLeft = (n > 0) ? (n10x + 1 * upperHopMeters) : (n10x + 1 * upperHopMeters);
-    double xRight = (n >= 2) ? (n10x + n * upperHopMeters) : xLeft; // if n=1 -> no movement
+    double xRight = (n >= 2) ? (n10x + n * upperHopMeters) : xLeft; 
 
     double ySta2 = n10y + sta2Distance;
 
-    // Start above the LEFTMOST AP
     sta2Mob->SetPosition(Vector(xLeft, ySta2, sta2Z));
 
     double speedMps = KmphToMps(sta2SpeedKmph);
@@ -882,14 +842,12 @@ main(int argc, char* argv[])
                     << ", speed=" << speedMps << "m/s"
                     << ", oneWay=" << oneWay << "s");
 
-      // First toggle at one-way time, then repeat
       Simulator::Schedule(Seconds(oneWay),
                           &Sta2ToggleVelocityAndReschedule,
                           sta2Mob, std::abs(speedMps), oneWay, simTimeSec);
     }
   }
 
-  // Enable forwarding on router-ish nodes
   {
     std::vector<Ptr<Node>> routers;
     routers.push_back(N10);
@@ -902,11 +860,9 @@ main(int argc, char* argv[])
     EnableForwardingOnNodes(routers);
   }
 
-  // AntNet init
   Ipv4AntNetRoutingHelper::BuildAntNetTopology();
   Ipv4AntNetRoutingHelper::InitializeNodeRoutingTables();
 
-  // failure schedule
   if (enableFail)
   {
     Ptr<Node> target = ResolveTargetNode(failTarget,
@@ -925,7 +881,6 @@ main(int argc, char* argv[])
     }
   }
 
-  // Metrics + traffic (STA1 -> STA2)
   PerSecondStats stats;
   stats.Init(simTimeSec);
 
@@ -970,7 +925,6 @@ main(int argc, char* argv[])
   Simulator::Run();
   Simulator::Destroy();
 
-  // Dump JSON arrays
   {
     std::vector<double> latency = stats.BuildLatencyAvg();
     std::vector<double> loss = stats.BuildLossRate();
